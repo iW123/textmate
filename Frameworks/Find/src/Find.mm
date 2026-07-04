@@ -1249,8 +1249,6 @@ static NSButton* OakCreateHistoryButton (NSString* toolTip)
     {
         [[NSWorkspace sharedWorkspace] selectFile:path inFileViewerRootedAtPath:nil];
     }
-
-    // [self close];
 }
 
 - (void)didRemoveResult:(FFResultNode*)item
