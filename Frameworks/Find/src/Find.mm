@@ -1229,8 +1229,12 @@ static NSButton* OakCreateHistoryButton (NSString* toolTip)
 {
 	OakDocument* doc = item.document;
 	if(!doc.isOpen)
+        [doc open];
 		doc.recentTrackingDisabled = YES;
 
+    // 确保窗口出现
+    [doc.window makeKeyAndOrderFront:nil];
+    [NSApp activateIgnoringOtherApps:YES];
 	NSMutableDictionary* captures = [NSMutableDictionary dictionary];
 	for(auto pair : item.match.captures)
 		captures[to_ns(pair.first)] = to_ns(pair.second);
