@@ -1,4 +1,4 @@
-name: MacOS
+name: TextMate CI (Ultimate)
 
 on:
   push:
@@ -15,17 +15,17 @@ jobs:
       CXX: ccache clang++
 
     steps:
-      # ========================
+      # =========================
       # Checkout
-      # ========================
+      # =========================
       - uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 1
 
-      # ========================
-      # Homebrew cache
-      # ========================
+      # =========================
+      # Cache Homebrew
+      # =========================
       - uses: actions/cache@v4
         with:
           path: |
@@ -34,9 +34,9 @@ jobs:
             /opt/homebrew/opt
           key: brew-${{ runner.os }}-textmate
 
-      # ========================
-      # ccache cache
-      # ========================
+      # =========================
+      # Cache ccache
+      # =========================
       - uses: actions/cache@v4
         with:
           path: .ccache
@@ -44,48 +44,99 @@ jobs:
           restore-keys: |
             ccache-${{ runner.os }}-
 
-      # ========================
-      # Install deps
-      # ========================
+      # =========================
+      # Install dependencies (safe mode)
+      # =========================
       - name: Install dependencies
         run: |
-          brew update
-          brew install boost capnp google-sparsehash multimarkdown ninja ragel ccache
+          brew update || true
 
-      # ⭐⭐⭐关键修复：PATH
+          brew install \
+            boost \
+            capnp \
+            google-sparsehash \
+            multimarkdown \
+            ninja \
+            ccache || true
+
+          # ragel fallback (关键修复)
+          brew install ragel || true
+
+      # =========================
+      # Fix PATH (关键)
+      # =========================
       - name: Setup PATH
         run: |
           echo "$(brew --prefix)/bin" >> $GITHUB_PATH
           echo "$(brew --prefix)/sbin" >> $GITHUB_PATH
 
-      # ========================
-      # Debug (防止再踩坑)
-      # ========================
-      - name: Debug tools
+      # =========================
+      # ragel HARD fallback (终极保障)
+      # =========================
+      - name: Ensure ragel exists
         run: |
-          which ragel
-          ragel --version
-          which ninja
-          which ccache
+          if ! command -v ragel >/dev/null 2>&1; then
+            echo "ragel missing → installing via flex fallback"
 
-      # ========================
-      # Configure
-      # ========================
+            brew install flex || true
+
+            if ! command -v ragel >/dev/null 2>&1; then
+              echo "ERROR: ragel still missing"
+              brew list
+              ls "$(brew --prefix)/bin" || true
+              exit 1
+            fi
+          fi
+
+          ragel --version || true
+
+      # =========================
+      # Debug tools
+      # =========================
+      - name: Debug environment
+        run: |
+          set -x
+          which brew
+          brew --prefix
+
+          which ragel || true
+          which ninja || true
+          which ccache || true
+
+      # =========================
+      # Configure (fixed environment)
+      # =========================
       - name: Configure
         run: |
+          set -e
+
+          PREFIX="$(brew --prefix)"
+
+          export PATH="$PREFIX/bin:$PATH"
+          export PATH="$PREFIX/sbin:$PATH"
+
           ./configure
 
-      # ========================
-      # Build
-      # ========================
+      # =========================
+      # Build (fast)
+      # =========================
       - name: Build
         run: |
+          set -e
           export PATH="$(brew --prefix)/bin:$PATH"
-          ninja -j$(sysctl -n hw.ncpu) TextMate
 
-      # ========================
-      # Artifact
-      # ========================
+          ninja -j$(sysctl -n hw.logicalcpu) TextMate
+
+      # =========================
+      # Find app (auto detect path)
+      # =========================
+      - name: Locate TextMate.app
+        run: |
+          find . -name "TextMate.app" -maxdepth 6 || true
+
+      # =========================
+      # Upload artifact
+      # =========================
       - name: Upload TextMate.app
         uses: actions/upload-artifact@v4
         with:
