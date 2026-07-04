@@ -28,39 +28,53 @@ jobs:
   
       - name: Build
         run: ninja TextMate
-  
-      # ====== 修改后的自动查找并打包步骤 ======
-      - name: Package Pretty DMG
+
+    # ====== 新增：诊断步骤，看看编译到底产出了什么 ======
+      - name: Debug - List Build Outputs
         run: |
-          # 1. 自动在全球目录中查找 TextMate.app 的实际位置
-          echo "正在寻找编译好的 TextMate.app..."
-          REAL_APP_PATH=$(find . -name "TextMate.app" -type d -not -path "*/.git/*" | head -n 1)
+          echo "=== 当前根目录结构 ==="
+          ls -F
           
-          if [ -z "$REAL_APP_PATH" ]; then
-            echo "❌ 错误：在当前项目中没有找到 TextMate.app，请确认 ninja 编译是否成功！"
-            exit 1
+          echo "=== 尝试寻找所有 .app 结尾的目录 ==="
+          find . -name "*.app" -type d
+          
+          echo "=== 如果有 build 目录，查看 build 目录结构 ==="
+          if [ -d "build" ]; then
+            find build -maxdepth 3
           fi
           
-          echo "✨ 成功找到 App，实际路径为: $REAL_APP_PATH"
+      # # ====== 修改后的自动查找并打包步骤 ======
+      # - name: Package Pretty DMG
+      #   run: |
+      #     # 1. 自动在全球目录中查找 TextMate.app 的实际位置
+      #     echo "正在寻找编译好的 TextMate.app..."
+      #     REAL_APP_PATH=$(find . -name "TextMate.app" -type d -not -path "*/.git/*" | head -n 1)
           
-          # 2. 获取该路径的绝对路径（create-dmg 对绝对路径支持更好）
-          ABS_APP_PATH=$(cd "$(dirname "$REAL_APP_PATH")" && pwd)/$(basename "$REAL_APP_PATH")
+      #     if [ -z "$REAL_APP_PATH" ]; then
+      #       echo "❌ 错误：在当前项目中没有找到 TextMate.app，请确认 ninja 编译是否成功！"
+      #       exit 1
+      #     fi
           
-          # 3. 使用绝对路径进行 create-dmg 打包
-          create-dmg \
-            --volname "TextMate Installation" \
-            --window-pos 200 120 \
-            --window-size 600 400 \
-            --icon-size 100 \
-            --icon "TextMate.app" 175 120 \
-            --app-drop-link 425 120 \
-            --hide-extension "TextMate.app" \
-            "TextMate.dmg" \
-            "$ABS_APP_PATH"
+      #     echo "✨ 成功找到 App，实际路径为: $REAL_APP_PATH"
+          
+      #     # 2. 获取该路径的绝对路径（create-dmg 对绝对路径支持更好）
+      #     ABS_APP_PATH=$(cd "$(dirname "$REAL_APP_PATH")" && pwd)/$(basename "$REAL_APP_PATH")
+          
+      #     # 3. 使用绝对路径进行 create-dmg 打包
+      #     create-dmg \
+      #       --volname "TextMate Installation" \
+      #       --window-pos 200 120 \
+      #       --window-size 600 400 \
+      #       --icon-size 100 \
+      #       --icon "TextMate.app" 175 120 \
+      #       --app-drop-link 425 120 \
+      #       --hide-extension "TextMate.app" \
+      #       "TextMate.dmg" \
+      #       "$ABS_APP_PATH"
   
-      # ====== 新增：上传产物 ======
-      - name: Upload DMG Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: TextMate-Pretty-DMG
-          path: TextMate.dmg
+      # # ====== 新增：上传产物 ======
+      # - name: Upload DMG Artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: TextMate-Pretty-DMG
+      #     path: TextMate.dmg
