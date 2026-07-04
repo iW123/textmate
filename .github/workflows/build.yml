@@ -16,19 +16,17 @@ jobs:
 
     steps:
       # ========================
-      # 1. Checkout
+      # Checkout
       # ========================
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 1
 
       # ========================
-      # 2. Cache Homebrew deps
+      # Homebrew cache
       # ========================
-      - name: Cache Homebrew
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: |
             ~/Library/Caches/Homebrew
@@ -37,10 +35,9 @@ jobs:
           key: brew-${{ runner.os }}-textmate
 
       # ========================
-      # 3. Cache ccache (核心加速)
+      # ccache cache
       # ========================
-      - name: Cache ccache
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: .ccache
           key: ccache-${{ runner.os }}-${{ github.sha }}
@@ -48,24 +45,50 @@ jobs:
             ccache-${{ runner.os }}-
 
       # ========================
-      # 4. Install deps（只在 cache miss 时慢）
+      # Install deps
       # ========================
       - name: Install dependencies
         run: |
           brew update
           brew install boost capnp google-sparsehash multimarkdown ninja ragel ccache
 
+      # ⭐⭐⭐关键修复：PATH
+      - name: Setup PATH
+        run: |
+          echo "$(brew --prefix)/bin" >> $GITHUB_PATH
+          echo "$(brew --prefix)/sbin" >> $GITHUB_PATH
+
       # ========================
-      # 5. Configure (只跑一次关键配置)
+      # Debug (防止再踩坑)
+      # ========================
+      - name: Debug tools
+        run: |
+          which ragel
+          ragel --version
+          which ninja
+          which ccache
+
+      # ========================
+      # Configure
       # ========================
       - name: Configure
         run: |
           ./configure
 
       # ========================
-      # 6. Build (极速模式)
+      # Build
       # ========================
       - name: Build
         run: |
-          export PATH="/usr/lib/ccache:$PATH"
+          export PATH="$(brew --prefix)/bin:$PATH"
           ninja -j$(sysctl -n hw.ncpu) TextMate
+
+      # ========================
+      # Artifact
+      # ========================
+      - name: Upload TextMate.app
+        uses: actions/upload-artifact@v4
+        with:
+          name: TextMate
+          path: |
+            **/TextMate.app
