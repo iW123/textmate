@@ -7,204 +7,75 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
-
-    env:
-      HOMEBREW_NO_AUTO_UPDATE: 1
-      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    runs-on: macOS-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 1
-  
-      - name: Setup
-        # 在 brew install 中加上 create-dmg
-        run: brew install boost capnp google-sparsehash multimarkdown ninja ragel create-dmg
-  
-      - name: Configure
-        run: ./configure
-  
-      - name: Build
-        run: ninja TextMate
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
 
-      # ====== 标准 macOS App 结构组装与签名 ======
-      - name: Package Pretty DMG
-        run: |
-          echo "=== 深入分析编译产物结构 ==="
-          # 1. 创建符合苹果标准的 Bundle 目录结构
-          mkdir -p dmg_source/TextMate.app/Contents/MacOS
-          mkdir -p dmg_source/TextMate.app/Contents/Resources
-          mkdir -p dmg_source/TextMate.app/Contents/Frameworks
-          mkdir -p dmg_source/TextMate.app/Contents/PlugIns
-  
-          # 2. 智能识别并归位核心可执行文件
-          # 看看 Applications 里到底是什么
-          RAW_TARGET=$(ls Applications/ | head -n 1)
-          
-          if [ -d "Applications/$RAW_TARGET/Contents" ]; then
-            echo "检测到编译产物本身已具备部分 App 结构，正在完整迁移..."
-            cp -a "Applications/$RAW_TARGET/Contents/"* "dmg_source/TextMate.app/Contents/"
-          else
-            echo "检测到编译产物为裸文件/不完整目录，进行标准结构化注入..."
-            # 将核心可执行文件/目录放入 MacOS
-            cp -a "Applications/$RAW_TARGET/"* "dmg_source/TextMate.app/Contents/MacOS/" 2>/dev/null || cp -a "Applications/$RAW_TARGET" "dmg_source/TextMate.app/Contents/MacOS/TextMate"
-          fi
-  
-          # 3. 注入外部依赖的共享库
-          if [ -d "Frameworks" ] && [ "$(ls -A Frameworks)" ]; then
-            cp -a Frameworks/* "dmg_source/TextMate.app/Contents/Frameworks/"
-          fi
-          if [ -d "PlugIns" ] && [ "$(ls -A PlugIns)" ]; then
-            cp -a PlugIns/* "dmg_source/TextMate.app/Contents/PlugIns/"
-          fi
-          if [ -d "Shared" ] && [ "$(ls -A Shared)" ]; then
-            # TextMate 的资源文件通常在 Shared 目录，将其归位到 Resources
-            cp -a Shared/* "dmg_source/TextMate.app/Contents/Resources/"
-          fi
-  
-          # 4. 关键：如果没有 Info.plist，苹果拒绝签名。我们检查并尝试补一个基础的 Info.plist
-          if [ ! -f "dmg_source/TextMate.app/Contents/Info.plist" ]; then
-            echo "⚠️ 缺少 Info.plist，正在自动生成基础合规元数据..."
-            cat <<EOF > "dmg_source/TextMate.app/Contents/Info.plist"
-              <?xml version="1.0" encoding="UTF-8"?>
-              <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-              <plist version="1.0">
-              <dict>
-                  <key>CFBundleDevelopmentRegion</key>
-                  <string>en</string>
-                  <key>CFBundleExecutable</key>
-                  <string>TextMate</string>
-                  <key>CFBundleIdentifier</key>
-                  <string>com.textmate.TextMate</string>
-                  <key>CFBundleInfoDictionaryVersion</key>
-                  <string>6.0</string>
-                  <key>CFBundleName</key>
-                  <string>TextMate</string>
-                  <key>CFBundlePackageType</key>
-                  <string>APPL</string>
-                  <key>CFBundleShortVersionString</key>
-                  <string>2.0</string>
-                  <key>CFBundleSignature</key>
-                  <string>TxMt</string>
-              </dict>
-              </plist>
-              EOF
-                      fi
-  
-          # 5. 执行自签名（此时结构已合法，不会再报 bundle format 错误）
-          echo "=== 正在执行 Ad-hoc 签名 ==="
-          codesign --force --deep --sign - "dmg_source/TextMate.app"
-  
-          # 6. 使用 create-dmg 打包
-          create-dmg \
-            --volname "TextMate Installation" \
-            --window-pos 200 120 \
-            --window-size 600 400 \
-            --icon-size 100 \
-            --icon "TextMate.app" 175 120 \
-            --app-drop-link 425 120 \
-            --hide-extension "TextMate.app" \
-            "TextMate.dmg" \
-            "dmg_source/TextMate.app"
-  
-      # ====== 上传产物 ======
-      - name: Upload DMG Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: TextMate-Mac-DMG
-          path: TextMate.dmg
-          
-      # # ====== 新增：诊断步骤，看看编译到底产出了什么 ======
-      # - name: Debug - List Build Outputs
-      #   run: |
-      #     echo "=== 当前根目录结构 ==="
-      #     ls -F
-          
-      #     echo "=== 尝试寻找所有 .app 结尾的目录 ==="
-      #     find . -name "*.app" -type d
-          
-      #     echo "=== 如果有 build 目录，查看 build 目录结构 ==="
-      #     if [ -d "build" ]; then
-      #       find build -maxdepth 3
-      #     fi
+    - name: Setup
+      run: brew install boost capnp google-sparsehash multimarkdown ninja ragel create-dmg
 
-      # # ====== 精准定位并打包步骤 ======
-      # - name: Package Pretty DMG
-      #   run: |
-      #     echo "=== 检查 Applications 目录下的实际内容 ==="
-      #     ls -la Applications/
-          
-      #     # 1. 寻找 Applications 目录下真正的 App 名字（TextMate 可能会带有版本号或后缀）
-      #     # 如果它是一个目录（比如 TextMate.app 没带 .app 后缀，或者叫 TextMate），我们动态获取它
-      #     TARGET_APP=$(ls Applications/ | head -n 1)
-          
-      #     if [ -z "$TARGET_APP" ]; then
-      #       echo "❌ 错误：Applications 目录下空空如也，编译可能失败了！"
-      #       exit 1
-      #     fi
-          
-      #     # 2. 如果生成的名字不带 .app 后缀，create-dmg 可能会报错，我们为它重命名或创建一个软链接
-      #     mkdir -p dmg_source
-      #     if [[ "$TARGET_APP" != *.app ]]; then
-      #       echo "发现构建产物为 $TARGET_APP，正在为其规范化命名为 TextMate.app..."
-      #       cp -R "Applications/$TARGET_APP" "dmg_source/TextMate.app"
-      #     else
-      #       cp -R "Applications/$TARGET_APP" "dmg_source/"
-      #     fi
-          
-      #     # 3. 使用规范化后的路径进行 create-dmg 打包
-      #     create-dmg \
-      #       --volname "TextMate Installation" \
-      #       --window-pos 200 120 \
-      #       --window-size 600 400 \
-      #       --icon-size 100 \
-      #       --icon "TextMate.app" 175 120 \
-      #       --app-drop-link 425 120 \
-      #       --hide-extension "TextMate.app" \
-      #       "TextMate.dmg" \
-      #       "dmg_source/TextMate.app"
-  
-      # # ====== 上传产物 ======
-      # - name: Upload DMG Artifact
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: TextMate-Mac-DMG
-      #     path: TextMate.dmg
-          
-      # # ====== 修改后的自动查找并打包步骤 ======
-      # - name: Package Pretty DMG
-      #   run: |
-      #     # 1. 自动在全球目录中查找 TextMate.app 的实际位置
-      #     echo "正在寻找编译好的 TextMate.app..."
-      #     REAL_APP_PATH=$(find . -name "TextMate.app" -type d -not -path "*/.git/*" | head -n 1)
-          
-      #     if [ -z "$REAL_APP_PATH" ]; then
-      #       echo "❌ 错误：在当前项目中没有找到 TextMate.app，请确认 ninja 编译是否成功！"
-      #       exit 1
-      #     fi
-          
-      #     echo "✨ 成功找到 App，实际路径为: $REAL_APP_PATH"
-          
-      #     # 2. 获取该路径的绝对路径（create-dmg 对绝对路径支持更好）
-      #     ABS_APP_PATH=$(cd "$(dirname "$REAL_APP_PATH")" && pwd)/$(basename "$REAL_APP_PATH")
-          
-      #     # 3. 使用绝对路径进行 create-dmg 打包
-      #     create-dmg \
-      #       --volname "TextMate Installation" \
-      #       --window-pos 200 120 \
-      #       --window-size 600 400 \
-      #       --icon-size 100 \
-      #       --icon "TextMate.app" 175 120 \
-      #       --app-drop-link 425 120 \
-      #       --hide-extension "TextMate.app" \
-      #       "TextMate.dmg" \
-      #       "$ABS_APP_PATH"
-  
-      # # ====== 新增：上传产物 ======
-      # - name: Upload DMG Artifact
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: TextMate-Pretty-DMG
-      #     path: TextMate.dmg
+    - name: Configure
+      run: ./configure
+
+    - name: Build and Assemble
+      run: |
+        # 使用 ninja 编译全部目标（包括内置框架和依赖项）
+        ninja
+        
+        # 顺便执行 TextMate 自带的打包/激活脚本（如果存在的话）
+        # TextMate 源码根目录或 bin 目录下通常有类如驻留、链接的脚本
+        # 如果 ninja 完后 Applications 目录已经好了，我们直接用它
+
+    - name: Create DMG
+      run: |
+        echo "=== 寻找编译生成的最终 App ==="
+        # 寻找整个目录里真正的、由系统编译生成的 TextMate.app
+        # TextMate 官方构建通常会把完整的 App 放在如下路径之一：
+        # 1. Applications/TextMate.app
+        # 2. 从本地导出的某个安装目录
+        
+        APP_PATH=""
+        if [ -d "Applications/TextMate.app" ]; then
+          APP_PATH="Applications/TextMate.app"
+        elif [ -d "Applications/TextMate" ]; then
+          # 如果名字没带后缀，帮它重命名，以便系统识别为 App Bundle
+          mv Applications/TextMate Applications/TextMate.app
+          APP_PATH="Applications/TextMate.app"
+        fi
+        
+        if [ -z "$APP_PATH" ]; then
+          # 最后的兜底搜索
+          APP_PATH=$(find . -name "TextMate.app" -type d -not -path "*/.git/*" | head -n 1)
+        fi
+
+        if [ -z "$APP_PATH" ]; then
+          echo "❌ 错误：仍未找到生成的 TextMate.app，请检查编译产物。"
+          exit 1
+        fi
+
+        echo "✨ 找到目标 App 路径: $APP_PATH"
+        
+        # 临时的自签名（Ad-hoc），防止运行时提示“已损坏”
+        echo "=== 正在执行本地自签名 ==="
+        codesign --force --deep --sign - "$APP_PATH"
+
+        # 使用 create-dmg 进行美化打包
+        create-dmg \
+          --volname "TextMate Installation" \
+          --window-pos 200 120 \
+          --window-size 600 400 \
+          --icon-size 100 \
+          --icon "TextMate.app" 175 120 \
+          --app-drop-link 425 120 \
+          --hide-extension "TextMate.app" \
+          "TextMate.dmg" \
+          "$APP_PATH"
+
+    - name: Upload DMG Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: TextMate-Mac-DMG
+        path: TextMate.dmg
