@@ -43,17 +43,29 @@ jobs:
         run: |
           ninja -j$(sysctl -n hw.logicalcpu) TextMate
 
+      # =========================
+      # Debug (关键修复)
+      # =========================
       - name: Debug output
         run: |
+          echo "==== find .app ===="
           find . -maxdepth 10 -name "*.app"
-          ls -R | head -200
-          
+
+          echo "==== find TextMate ===="
+          find . -maxdepth 10 -name "*TextMate*"
+
+          echo "==== build tree ===="
+          ls -R build || true
+
       # =========================
-      # Upload artifact
+      # Upload artifact (修复核心)
       # =========================
-      - name: Upload TextMate.app
+      - name: Upload TextMate artifact
         uses: actions/upload-artifact@v4
         with:
           name: TextMate
-          path: "**/TextMate.app"
+          path: |
+            build/**/*.app
+            **/TextMate.app
+            **/TextMate
           if-no-files-found: error
