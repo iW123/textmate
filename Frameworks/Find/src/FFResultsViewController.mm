@@ -325,7 +325,7 @@ static FFResultNode* PreviousNode (FFResultNode* node)
 	if(!_scrollView)
 	{
 		NSString* fontName = [NSUserDefaults.standardUserDefaults stringForKey:kUserDefaultsSearchResultsFontNameKey];
-		CGFloat fontSize   = [NSUserDefaults.standardUserDefaults floatForKey:kUserDefaultsSearchResultsFontSizeKey] ?: 11.0;
+		CGFloat fontSize   = [NSUserDefaults.standardUserDefaults floatForKey:kUserDefaultsSearchResultsFontSizeKey] ?: 12.0;
 		_searchResultsFont = (fontName ? [NSFont fontWithName:fontName size:fontSize] : [NSFont controlContentFontOfSize:fontSize]);
 
 		NSTextField* label = OakCreateLabel(@"m", _searchResultsFont);
@@ -600,9 +600,32 @@ static FFResultNode* PreviousNode (FFResultNode* node)
 
 - (void)didSingleClick:(id)sender
 {
-	if(_outlineView.clickedRow != -1 && _outlineView.numberOfSelectedRows == 1)
-		[self didSelectResult:[_outlineView itemAtRow:_outlineView.clickedRow]];
+    if(_outlineView.clickedRow == -1)
+        return;
+
+    FFResultNode* item = [_outlineView itemAtRow:_outlineView.clickedRow];
+
+    NSView* view = [_outlineView viewAtColumn:1 row:_outlineView.clickedRow makeIfNecessary:NO];
+
+    if([view isKindOfClass:[OakSearchResultsHeaderCellView class]])
+    {
+        NSPoint p = [_outlineView convertPoint:[_outlineView.window mouseLocationOutsideOfEventStream]
+                                      fromView:nil];
+
+        NSRect rowRect = [_outlineView rectOfRow:_outlineView.clickedRow];
+
+        if(NSPointInRect(p, rowRect))
+        {
+            // 这里统一处理
+            [(OakSearchResultsHeaderCellView*)view WSOpenInFinder];
+            return;
+        }
+    }
+
+    if(_outlineView.numberOfSelectedRows == 1)
+        [self didSelectResult:item];
 }
+
 
 - (void)didDoubleClick:(id)sender
 {
