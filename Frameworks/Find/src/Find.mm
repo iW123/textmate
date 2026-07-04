@@ -1228,30 +1228,15 @@ static NSButton* OakCreateHistoryButton (NSString* toolTip)
 - (void)didSelectResult:(FFResultNode*)item
 {
 	OakDocument* doc = item.document;
-    if(!doc.isOpen) {
-        // ⭐关键：用“新窗口方式打开”
-        [[NSDocumentController sharedDocumentController]
-            openDocumentWithContentsOfURL:doc.fileURL
-                                  display:YES
-                        completionHandler:nil];
-    } else {
-        [doc.window makeKeyAndOrderFront:nil];
-    }
-    // doc.recentTrackingDisabled = YES;
+	if(!doc.isOpen)
+		doc.recentTrackingDisabled = YES;
 
-    // 确保窗口出现
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if(doc.window)
-            [doc.window makeKeyAndOrderFront:nil];
-        
-        [NSApp activateIgnoringOtherApps:YES];
-        NSMutableDictionary* captures = [NSMutableDictionary dictionary];
-        for(auto pair : item.match.captures)
-            captures[to_ns(pair.first)] = to_ns(pair.second);
-        doc.matchCaptures = [captures copy];
+	NSMutableDictionary* captures = [NSMutableDictionary dictionary];
+	for(auto pair : item.match.captures)
+		captures[to_ns(pair.first)] = to_ns(pair.second);
+	doc.matchCaptures = [captures copy];
 
-        [_delegate selectRange:item.match.range inDocument:doc];
-    });
+	[_delegate selectRange:item.match.range inDocument:doc];
 }
 
 - (void)didDoubleClickResult:(FFResultNode*)item
@@ -1259,7 +1244,7 @@ static NSButton* OakCreateHistoryButton (NSString* toolTip)
 	if([[NSUserDefaults.standardUserDefaults objectForKey:kUserDefaultsKeepSearchResultsOnDoubleClick] boolValue])
 		return;
 	[_delegate bringToFront];
-	// [self close];
+	[self close];
 }
 
 - (void)didRemoveResult:(FFResultNode*)item
