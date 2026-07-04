@@ -1,61 +1,20 @@
 #!/bin/sh
-# set -u
+set -e
 
-function error () {
-	printf >&2 "%s\n\nPlease see README.md for build instructions.\n" "$1"
-	exit 1
+error() {
+    echo "$1"
+    exit 1
 }
 
-# ===============================
-# = Detect Homebrew prefix      =
-# ===============================
-
-if command -v brew >/dev/null 2>&1; then
-	BREW_PREFIX="$(brew --prefix)"
-else
-	BREW_PREFIX="/usr/local"
-fi
-
-INCLUDE_DIR="${BREW_PREFIX}/include"
-LIB_DIR="${BREW_PREFIX}/lib"
-
-# ===============================
-# = Check required dependencies =
-# ===============================
-
-for dep in capnp ninja ragel multimarkdown pgrep pkill; do
-	which -s "$dep" || error "*** dependency missing: ‘${dep}’."
+for dep in brew ninja ragel capnp multimarkdown; do
+    command -v "$dep" >/dev/null || error "$dep not found"
 done
 
-if [[ -e local.rave ]]; then
-	echo >&2 "Skipping writing ‘local.rave’: File already exists"
-else
-	echo >> local.rave "add FLAGS \"-I${INCLUDE_DIR}\""
-	echo >> local.rave "add LN_FLAGS \"-L${LIB_DIR}\""
+PREFIX="$(brew --prefix)"
 
-	for hdr in \
-		boost/crc.hpp \
-		boost/variant.hpp \
-		capnp/message.h \
-		capnp/serialize-packed.h \
-		sparsehash/dense_hash_map
-	do
-		test -f "${INCLUDE_DIR}/${hdr}" || \
-			error "*** dependency missing: ‘${INCLUDE_DIR}/${hdr}’. Install dependency and/or update ‘local.rave’ with correct path."
-	done
+cat > local.rave <<EOF
+add FLAGS "-I${PREFIX}/include"
+add LN_FLAGS "-L${PREFIX}/lib"
+EOF
 
-	for lib in capnp kj; do
-		ls "${LIB_DIR}/lib${lib}."* >/dev/null 2>&1 || \
-			error "*** dependency missing: ‘${LIB_DIR}/lib${lib}.*’. Install dependency and/or update ‘local.rave’ with correct path."
-	done
-fi
-
-# ========================
-# = Generate build files =
-# ========================
-
-if [[ -d "$builddir" ]]; then
-	bin/rave -crelease -tTextMate -b"$builddir"
-else
-	bin/rave -crelease -tTextMate
-fi
+exec bin/rave -crelease -tTextMate
