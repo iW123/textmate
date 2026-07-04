@@ -219,19 +219,6 @@ static FFResultNode* PreviousNode (FFResultNode* node)
 
 		self.imageView          = imageView;
 		self.textField          = textField;
-		
-		self.imageView.wantsLayer = YES;
-		NSClickGestureRecognizer* click = [[NSClickGestureRecognizer alloc] initWithTarget:self action:@selector(WSOpenInFinder)];
-		[self.imageView addGestureRecognizer:click];
-		//self.imageView.userInteractionEnabled = YES;
-		self.textField.selectable = YES;
-		self.textField.editable = NO;
-		self.textField.enabled = YES;
-		self.textField.wantsLayer = YES;
-		NSClickGestureRecognizer* click2 = [[NSClickGestureRecognizer alloc] initWithTarget:self action:@selector(WSOpenInFinder)];
-		[self.textField addGestureRecognizer:click2];
-		//self.textField.userInteractionEnabled = YES;
-		
 		self.countOfLeafsButton = countOfLeafs;
 		self.removeButton       = remove;
 	}
@@ -609,15 +596,17 @@ static FFResultNode* PreviousNode (FFResultNode* node)
 
     if([view isKindOfClass:[OakSearchResultsHeaderCellView class]])
     {
-        NSPoint p = [_outlineView convertPoint:[_outlineView.window mouseLocationOutsideOfEventStream]
-                                      fromView:nil];
+        OakSearchResultsHeaderCellView* cell = (OakSearchResultsHeaderCellView*)view;
 
-        NSRect rowRect = [_outlineView rectOfRow:_outlineView.clickedRow];
+        NSEvent* event = NSApp.currentEvent;
+        NSPoint p = [_outlineView convertPoint:event.locationInWindow fromView:nil];
 
-        if(NSPointInRect(p, rowRect))
+        NSPoint local = [cell convertPoint:p fromView:_outlineView];
+
+        if(NSPointInRect(local, cell.imageView.frame) ||
+           NSPointInRect(local, cell.textField.frame))
         {
-            // 这里统一处理
-            [(OakSearchResultsHeaderCellView*)view WSOpenInFinder];
+            [cell WSOpenInFinder];
             return;
         }
     }
@@ -625,6 +614,7 @@ static FFResultNode* PreviousNode (FFResultNode* node)
     if(_outlineView.numberOfSelectedRows == 1)
         [self didSelectResult:item];
 }
+
 
 
 - (void)didDoubleClick:(id)sender
