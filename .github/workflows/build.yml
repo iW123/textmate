@@ -47,18 +47,18 @@ jobs:
           cp -a Applications/TextMate dmg_source/TextMate.app/Contents/MacOS/TextMate
 
           cat > dmg_source/TextMate.app/Contents/Info.plist <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleExecutable</key><string>TextMate</string>
-  <key>CFBundleIdentifier</key><string>com.textmate.TextMate</string>
-  <key>CFBundleName</key><string>TextMate</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>2.0</string>
-</dict>
-</plist>
-EOF
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+              <key>CFBundleExecutable</key><string>TextMate</string>
+              <key>CFBundleIdentifier</key><string>com.textmate.TextMate</string>
+              <key>CFBundleName</key><string>TextMate</string>
+              <key>CFBundlePackageType</key><string>APPL</string>
+              <key>CFBundleShortVersionString</key><string>2.0</string>
+            </dict>
+            </plist>
+            EOF
         else
           echo "Copying REAL_APP: $REAL_APP"
           cp -a "$REAL_APP" dmg_source/
