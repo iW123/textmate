@@ -18,98 +18,41 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 1
-
-      - name: Show environment
-        run: |
-          sw_vers
-          xcodebuild -version
-          brew --version
-          brew --prefix
-
-      - name: Install dependencies
-        run: |
-          brew install \
-            boost \
-            capnp \
-            google-sparsehash \
-            multimarkdown \
-            ninja \
-            ragel
-
+  
+      - name: Setup
+        # 在 brew install 中加上 create-dmg
+        run: brew install boost capnp google-sparsehash multimarkdown ninja ragel create-dmg
+  
       - name: Configure
         run: ./configure
-
+  
       - name: Build
+        run: ninja TextMate
+  
+      # ====== 新增：美化打包 DMG ======
+      - name: Package Pretty DMG
         run: |
-          ninja -j$(sysctl -n hw.logicalcpu)
-          ninja install || true
-
-      - name: Locate output
-        run: |
-          echo "Searching for build output..."
-
-          # 先找 .app
-          APP_PATH=$(find . -name "TextMate.app" | head -n 1)
-
-          if [ -n "$APP_PATH" ]; then
-            echo "FOUND APP: $APP_PATH"
-            echo "APP_PATH=$APP_PATH" >> $GITHUB_ENV
-            echo "TYPE=app" >> $GITHUB_ENV
-          else
-            echo "No .app found, searching binary..."
-
-            BIN_PATH=$(find . -type f -perm -111 -name "TextMate" | head -n 1)
-
-            if [ -z "$BIN_PATH" ]; then
-              echo "❌ No output found"
-              exit 1
-            fi
-
-            echo "BIN_PATH=$BIN_PATH" >> $GITHUB_ENV
-            echo "TYPE=bin" >> $GITHUB_ENV
+          # 1. 定位编译好的 App 路径（根据具体打包输出调整）
+          APP_PATH="build/TextMate.app"
+          if [ ! -d "$APP_PATH" ]; then
+            APP_PATH="TextMate.app"
           fi
-
-      - name: Create DMG
-        run: |
-          brew install create-dmg
-
-          mkdir -p dist
-
-          if [ "$TYPE" = "app" ]; then
-            cp -R "$APP_PATH" dist/
-          else
-            mkdir -p dist/TextMate.app/Contents/MacOS
-            cp "$BIN_PATH" dist/TextMate.app/Contents/MacOS/TextMate
-
-            cat > dist/TextMate.app/Contents/Info.plist <<EOF
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
-            <dict>
-              <key>CFBundleName</key>
-              <string>TextMate</string>
-              <key>CFBundleExecutable</key>
-              <string>TextMate</string>
-              <key>CFBundleIdentifier</key>
-              <string>com.textmate.fake</string>
-              <key>CFBundlePackageType</key>
-              <string>APPL</string>
-            </dict>
-            </plist>
-            EOF
-                      fi
-            
-                      create-dmg \
-                        --volname "TextMate" \
-                        --window-size 800 400 \
-                        --app-drop-link 600 185 \
-                        "TextMate.dmg" \
-                        "dist/"
-
-      - name: Upload DMG
+          
+          # 2. 使用 create-dmg 进行美化打包
+          create-dmg \
+            --volname "TextMate Installation" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "TextMate.app" 175 120 \
+            --app-drop-link 425 120 \
+            --hide-extension "TextMate.app" \
+            "TextMate.dmg" \
+            "$APP_PATH"
+  
+      # ====== 新增：上传产物 ======
+      - name: Upload DMG Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TextMate-dmg
+          name: TextMate-Pretty-DMG
           path: TextMate.dmg
-          if-no-files-found: error
