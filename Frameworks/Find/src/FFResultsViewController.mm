@@ -339,7 +339,7 @@ static FFResultNode* PreviousNode (FFResultNode* node)
 		_outlineView.autoresizesOutlineColumn           = NO;
 		_outlineView.usesAlternatingRowBackgroundColors = YES;
 		_outlineView.headerView                         = nil;
-		_outlineView.rowHeight                          = std::max(lineHeight, 14.0);
+		_outlineView.rowHeight                          = std::max(lineHeight, 18.0);
 		_outlineView.columnAutoresizingStyle            = NSTableViewNoColumnAutoresizing;
 
 		if(@available(macos 11.0, *))
