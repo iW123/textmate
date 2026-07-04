@@ -41,7 +41,7 @@ jobs:
 
       - name: Build
         run: |
-          ninja -j$(sysctl -n hw.logicalcpu)  # TextMate
+          ninja -j$(sysctl -n hw.logicalcpu)
           ninja install || true
 
       - name: Locate output
