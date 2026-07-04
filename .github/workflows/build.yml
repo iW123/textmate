@@ -1,18 +1,71 @@
-name: CI
+name: MacOS
 
-on: [push]
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macOS-latest
+    runs-on: macos-14
+
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CC: ccache clang
+      CXX: ccache clang++
 
     steps:
-    - uses: actions/checkout@v2
-      with:
-        submodules: recursive
-    - name: Setup
-      run: brew install boost capnp google-sparsehash multimarkdown ninja ragel
-    - name: Configure
-      run: ./configure
-    - name: Build
-      run: ninja TextMate
+      # ========================
+      # 1. Checkout
+      # ========================
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      # ========================
+      # 2. Cache Homebrew deps
+      # ========================
+      - name: Cache Homebrew
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /opt/homebrew/Cellar
+            /opt/homebrew/opt
+          key: brew-${{ runner.os }}-textmate
+
+      # ========================
+      # 3. Cache ccache (核心加速)
+      # ========================
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
+      # ========================
+      # 4. Install deps（只在 cache miss 时慢）
+      # ========================
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install boost capnp google-sparsehash multimarkdown ninja ragel ccache
+
+      # ========================
+      # 5. Configure (只跑一次关键配置)
+      # ========================
+      - name: Configure
+        run: |
+          ./configure
+
+      # ========================
+      # 6. Build (极速模式)
+      # ========================
+      - name: Build
+        run: |
+          export PATH="/usr/lib/ccache:$PATH"
+          ninja -j$(sysctl -n hw.ncpu) TextMate
