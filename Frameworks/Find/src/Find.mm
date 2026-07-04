@@ -1233,16 +1233,18 @@ static NSButton* OakCreateHistoryButton (NSString* toolTip)
 		// doc.recentTrackingDisabled = YES;
 
     // 确保窗口出现
-    if(doc.window)
-        [doc.window makeKeyAndOrderFront:nil];
-    
-    [NSApp activateIgnoringOtherApps:YES];
-	NSMutableDictionary* captures = [NSMutableDictionary dictionary];
-	for(auto pair : item.match.captures)
-		captures[to_ns(pair.first)] = to_ns(pair.second);
-	doc.matchCaptures = [captures copy];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if(doc.window)
+            [doc.window makeKeyAndOrderFront:nil];
+        
+        [NSApp activateIgnoringOtherApps:YES];
+        NSMutableDictionary* captures = [NSMutableDictionary dictionary];
+        for(auto pair : item.match.captures)
+            captures[to_ns(pair.first)] = to_ns(pair.second);
+        doc.matchCaptures = [captures copy];
 
-	[_delegate selectRange:item.match.range inDocument:doc];
+        [_delegate selectRange:item.match.range inDocument:doc];
+    });
 }
 
 - (void)didDoubleClickResult:(FFResultNode*)item
