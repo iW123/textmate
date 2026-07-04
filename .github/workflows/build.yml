@@ -1,7 +1,8 @@
-name: TextMate CI (Ultimate)
+name: CI
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -10,121 +11,36 @@ jobs:
 
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CC: ccache clang
-      CXX: ccache clang++
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
 
     steps:
-      # =========================
-      # Checkout
-      # =========================
       - uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 1
 
-      # =========================
-      # Cache Homebrew
-      # =========================
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Caches/Homebrew
-            /opt/homebrew/Cellar
-            /opt/homebrew/opt
-          key: brew-${{ runner.os }}-textmate
+      - name: Show environment
+        run: |
+          sw_vers
+          xcodebuild -version
+          brew --version
+          brew --prefix
 
-      # =========================
-      # Cache ccache
-      # =========================
-      - uses: actions/cache@v4
-        with:
-          path: .ccache
-          key: ccache-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            ccache-${{ runner.os }}-
-
-      # =========================
-      # Install dependencies (safe mode)
-      # =========================
       - name: Install dependencies
         run: |
-          brew update || true
-
           brew install \
             boost \
             capnp \
             google-sparsehash \
             multimarkdown \
             ninja \
-            ccache || true
+            ragel
 
-          # ragel fallback (关键修复)
-          brew install ragel || true
-
-      # =========================
-      # Fix PATH (关键)
-      # =========================
-      - name: Setup PATH
-        run: |
-          echo "$(brew --prefix)/bin" >> $GITHUB_PATH
-          echo "$(brew --prefix)/sbin" >> $GITHUB_PATH
-
-      # =========================
-      # ragel HARD fallback (终极保障)
-      # =========================
-      - name: Ensure ragel exists
-        run: |
-          if ! command -v ragel >/dev/null 2>&1; then
-            echo "ragel missing → installing via flex fallback"
-
-            brew install flex || true
-
-            if ! command -v ragel >/dev/null 2>&1; then
-              echo "ERROR: ragel still missing"
-              brew list
-              ls "$(brew --prefix)/bin" || true
-              exit 1
-            fi
-          fi
-
-          ragel --version || true
-
-      # =========================
-      # Debug tools
-      # =========================
-      - name: Debug environment
-        run: |
-          set -x
-          which brew
-          brew --prefix
-
-          which ragel || true
-          which ninja || true
-          which ccache || true
-
-      # =========================
-      # Configure (fixed environment)
-      # =========================
       - name: Configure
-        run: |
-          set -e
+        run: ./configure
 
-          PREFIX="$(brew --prefix)"
-
-          export PATH="$PREFIX/bin:$PATH"
-          export PATH="$PREFIX/sbin:$PATH"
-
-          ./configure
-
-      # =========================
-      # Build (fast)
-      # =========================
       - name: Build
         run: |
-          set -e
-          export PATH="$(brew --prefix)/bin:$PATH"
-
           ninja -j$(sysctl -n hw.logicalcpu) TextMate
 
       # =========================
