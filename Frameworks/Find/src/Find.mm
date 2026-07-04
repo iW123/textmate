@@ -1244,7 +1244,7 @@ static NSButton* OakCreateHistoryButton (NSString* toolTip)
 	if([[NSUserDefaults.standardUserDefaults objectForKey:kUserDefaultsKeepSearchResultsOnDoubleClick] boolValue])
 		return;
 	[_delegate bringToFront];
-	[self close];
+	// [self close];
 }
 
 - (void)didRemoveResult:(FFResultNode*)item
