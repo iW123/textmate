@@ -57,6 +57,27 @@ jobs:
           echo "==== build tree ===="
           ls -R build || true
 
+      - name: Create DMG
+        run: |
+          brew install create-dmg
+
+          APP_PATH=$(find . -maxdepth 10 -name "TextMate.app" | head -n 1)
+
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ No TextMate.app found, cannot create dmg"
+            exit 1
+          fi
+
+          mkdir -p dist
+          cp -R "$APP_PATH" dist/
+
+          create-dmg \
+            --volname "TextMate" \
+            --window-size 800 400 \
+            --app-drop-link 600 185 \
+            "TextMate.dmg" \
+            "dist/"
+
       # =========================
       # Upload artifact (修复核心)
       # =========================
@@ -64,8 +85,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: TextMate
-          path: |
-            build/**/*.app
-            **/TextMate.app
-            **/TextMate
+          path: TextMate.dmg
           if-no-files-found: error
