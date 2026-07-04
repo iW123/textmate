@@ -20,45 +20,41 @@ jobs:
     - name: Configure
       run: ./configure
 
-    - name: Build and Install to Local Directory
+    - name: Build
       run: |
-        # 1. 编译全部项目
+        # 执行编译，这会将完整的、符合苹果规范的 TextMate.app 生成到 ~/build/ 目录下
         ninja
-        
-        # 2. 调用 TextMate 官方自带的安装/组装脚本（通常在 bin 目录下）
-        # 这个脚本会将二进制、Frameworks、PlugIns 和本地化资源完美融合到一个真正的 TextMate.app 中
-        # 它会默认把组装好的完整 App 输出到根目录的 ~/Applications/ 或指定的 build 目录
-        if [ -f "bin/create_app" ]; then
-          ./bin/create_app
-        elif [ -f "bin/install" ]; then
-          ./bin/install
-        else
-          # 如果没有找到独立脚本，尝试寻找 ninja 自身集成的安装目标
-          ninja install || echo "No explicit install target"
-        fi
 
     - name: Create DMG
       run: |
-        echo "=== 寻找由官方脚本组装出来的真正 App ==="
+        echo "=== 从 ~/build 目录提取官方生成的完整 App ==="
         
-        # 1. 全局搜索真正符合格式的 TextMate.app
-        # 官方脚本组装完后，通常会放在系统的 ~/Applications 或当前目录的某个地方
-        REAL_APP=$(find ~/Applications . -name "TextMate.app" -type d -maxdepth 4 2>/dev/null | head -n 1)
+        # 1. 创建干净的临时打包源目录
+        mkdir -p dmg_source
         
-        if [ -z "$REAL_APP" ]; then
-          echo "❌ 无法通过官方脚本找到组装好的 TextMate.app，开始最后一步强制修复..."
-          # 如果实在找不到，我们将 Applications 里的文件通过普通的 zip/unzip 刷新一层元数据再试
-          mkdir -p final_source
-          cp -a Applications/* final_source/ 2>/dev/null || cp -a bin/* final_source/ 2>/dev/null
-          REAL_APP="final_source"
+        # 2. 从真实输出位置 ~/build/ 复制完整的 TextMate.app
+        # 根据 TextMate 习惯，它可能在 ~/build/Applications/ 或直接在 ~/build/
+        if [ -d "$HOME/build/Applications/TextMate.app" ]; then
+          cp -a "$HOME/build/Applications/TextMate.app" dmg_source/
+        elif [ -d "$HOME/build/TextMate.app" ]; then
+          cp -a "$HOME/build/TextMate.app" dmg_source/
+        else
+          # 如果路径有微调，全局搜索 ~/build 目录
+          echo "⚠️ 正在 ~/build 中精准搜索 TextMate.app..."
+          FOUND_PATH=$(find $HOME/build -name "TextMate.app" -type d -maxdepth 3 2>/dev/null | head -n 1)
+          if [ -n "$FOUND_PATH" ]; then
+            cp -a "$FOUND_PATH" dmg_source/
+          else
+            echo "❌ 严重错误：在 ~/build 中未找到 TextMate.app，请检查编译日志！"
+            exit 1
+          fi
         fi
-        
-        echo "✨ 确定打包源路径: $REAL_APP"
-        
-        # 2. 如果它具备标准结构，尝试签名。如果报错，直接跳过签名（DMG 依然可以打包）
-        codesign --force --deep --sign - "$REAL_APP" || echo "⚠️ 签名失败，跳过签名直接打包..."
 
-        # 3. 使用 create-dmg 进行美化打包
+        # 3. 现在的 App 是官方标准组装好的，直接进行本地临时的深度自签名（防止下载后提示损坏）
+        echo "=== 正在执行本地自签名 ==="
+        codesign --force --deep --sign - "dmg_source/TextMate.app" || echo "⚠️ 签名失败，跳过签名直接打包..."
+
+        # 4. 使用 create-dmg 进行美化打包
         create-dmg \
           --volname "TextMate Installation" \
           --window-pos 200 120 \
@@ -68,7 +64,7 @@ jobs:
           --app-drop-link 425 120 \
           --hide-extension "TextMate.app" \
           "TextMate.dmg" \
-          "$REAL_APP"
+          "dmg_source/TextMate.app"
 
     - name: Upload DMG Artifact
       uses: actions/upload-artifact@v4
