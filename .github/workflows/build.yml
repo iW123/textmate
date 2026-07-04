@@ -29,35 +29,75 @@ jobs:
       - name: Build
         run: ninja TextMate
 
-      # ====== 完美组装、自签名并打包成 DMG ======
+      # ====== 标准 macOS App 结构组装与签名 ======
       - name: Package Pretty DMG
         run: |
-          echo "=== 开始组装完整的 TextMate.app ==="
+          echo "=== 深入分析编译产物结构 ==="
+          # 1. 创建符合苹果标准的 Bundle 目录结构
+          mkdir -p dmg_source/TextMate.app/Contents/MacOS
+          mkdir -p dmg_source/TextMate.app/Contents/Resources
+          mkdir -p dmg_source/TextMate.app/Contents/Frameworks
+          mkdir -p dmg_source/TextMate.app/Contents/PlugIns
+  
+          # 2. 智能识别并归位核心可执行文件
+          # 看看 Applications 里到底是什么
+          RAW_TARGET=$(ls Applications/ | head -n 1)
           
-          # 1. 创建标准的临时打包源目录
-          mkdir -p dmg_source
-          
-          # 2. 抓取主程序名字（使用 -a 保持原有的软链接和元数据，不破坏 App 结构）
-          TARGET_NAME=$(ls Applications/ | head -n 1)
-          cp -a "Applications/$TARGET_NAME" "dmg_source/TextMate.app"
-          
-          # 3. 精准拼装核心依赖
-          mkdir -p "dmg_source/TextMate.app/Contents/Frameworks"
-          mkdir -p "dmg_source/TextMate.app/Contents/PlugIns"
-          
-          if [ -d "Frameworks" ]; then
-            cp -a Frameworks/* "dmg_source/TextMate.app/Contents/Frameworks/"
-          fi
-          
-          if [ -d "PlugIns" ]; then
-            cp -a PlugIns/* "dmg_source/TextMate.app/Contents/PlugIns/"
+          if [ -d "Applications/$RAW_TARGET/Contents" ]; then
+            echo "检测到编译产物本身已具备部分 App 结构，正在完整迁移..."
+            cp -a "Applications/$RAW_TARGET/Contents/"* "dmg_source/TextMate.app/Contents/"
+          else
+            echo "检测到编译产物为裸文件/不完整目录，进行标准结构化注入..."
+            # 将核心可执行文件/目录放入 MacOS
+            cp -a "Applications/$RAW_TARGET/"* "dmg_source/TextMate.app/Contents/MacOS/" 2>/dev/null || cp -a "Applications/$RAW_TARGET" "dmg_source/TextMate.app/Contents/MacOS/TextMate"
           fi
   
-          # 4. 在 CI 环境内执行 Ad-hoc 自签名（解决“应用已损坏”的核心）
-          echo "=== 正在对拼装完整的 App 进行自签名 ==="
+          # 3. 注入外部依赖的共享库
+          if [ -d "Frameworks" ] && [ "$(ls -A Frameworks)" ]; then
+            cp -a Frameworks/* "dmg_source/TextMate.app/Contents/Frameworks/"
+          fi
+          if [ -d "PlugIns" ] && [ "$(ls -A PlugIns)" ]; then
+            cp -a PlugIns/* "dmg_source/TextMate.app/Contents/PlugIns/"
+          fi
+          if [ -d "Shared" ] && [ "$(ls -A Shared)" ]; then
+            # TextMate 的资源文件通常在 Shared 目录，将其归位到 Resources
+            cp -a Shared/* "dmg_source/TextMate.app/Contents/Resources/"
+          fi
+  
+          # 4. 关键：如果没有 Info.plist，苹果拒绝签名。我们检查并尝试补一个基础的 Info.plist
+          if [ ! -f "dmg_source/TextMate.app/Contents/Info.plist" ]; then
+            echo "⚠️ 缺少 Info.plist，正在自动生成基础合规元数据..."
+            cat <<EOF > "dmg_source/TextMate.app/Contents/Info.plist"
+              <?xml version="1.0" encoding="UTF-8"?>
+              <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+              <plist version="1.0">
+              <dict>
+                  <key>CFBundleDevelopmentRegion</key>
+                  <string>en</string>
+                  <key>CFBundleExecutable</key>
+                  <string>TextMate</string>
+                  <key>CFBundleIdentifier</key>
+                  <string>com.textmate.TextMate</string>
+                  <key>CFBundleInfoDictionaryVersion</key>
+                  <string>6.0</string>
+                  <key>CFBundleName</key>
+                  <string>TextMate</string>
+                  <key>CFBundlePackageType</key>
+                  <string>APPL</string>
+                  <key>CFBundleShortVersionString</key>
+                  <string>2.0</string>
+                  <key>CFBundleSignature</key>
+                  <string>TxMt</string>
+              </dict>
+              </plist>
+              EOF
+                      fi
+  
+          # 5. 执行自签名（此时结构已合法，不会再报 bundle format 错误）
+          echo "=== 正在执行 Ad-hoc 签名 ==="
           codesign --force --deep --sign - "dmg_source/TextMate.app"
-          
-          # 5. 执行 create-dmg 美化打包
+  
+          # 6. 使用 create-dmg 打包
           create-dmg \
             --volname "TextMate Installation" \
             --window-pos 200 120 \
