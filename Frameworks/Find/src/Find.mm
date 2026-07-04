@@ -1228,8 +1228,16 @@ static NSButton* OakCreateHistoryButton (NSString* toolTip)
 - (void)didSelectResult:(FFResultNode*)item
 {
 	OakDocument* doc = item.document;
-	if(!doc.isOpen)
-        [doc open];  // doc.recentTrackingDisabled = YES;
+    if(!doc.isOpen) {
+        // ⭐关键：用“新窗口方式打开”
+        [[NSDocumentController sharedDocumentController]
+            openDocumentWithContentsOfURL:doc.fileURL
+                                  display:YES
+                        completionHandler:nil];
+    } else {
+        [doc.window makeKeyAndOrderFront:nil];
+    }
+    // doc.recentTrackingDisabled = YES;
 
     // 确保窗口出现
     dispatch_async(dispatch_get_main_queue(), ^{
