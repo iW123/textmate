@@ -1,13 +1,13 @@
 name: MacOS
 
 on:
-  # push:
+  push:
   # pull_request:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macOS-15
+    runs-on: macOS-14
 
     steps:
     - uses: actions/checkout@v4
