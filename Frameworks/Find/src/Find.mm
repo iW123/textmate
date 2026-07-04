@@ -1229,8 +1229,7 @@ static NSButton* OakCreateHistoryButton (NSString* toolTip)
 {
 	OakDocument* doc = item.document;
 	if(!doc.isOpen)
-        [doc open];
-		// doc.recentTrackingDisabled = YES;
+        [doc open];  // doc.recentTrackingDisabled = YES;
 
     // 确保窗口出现
     dispatch_async(dispatch_get_main_queue(), ^{
