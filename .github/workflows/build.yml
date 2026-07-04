@@ -50,16 +50,35 @@ jobs:
           cp -a "$REAL_APP" dmg_source/
         fi
 
-        # 2. 关键补丁：修复二进制文件里的 Homebrew 动态库依赖
-        # dylibbundler 会自动把 TextMate 依赖的外部 .dylib 文件拷贝到 App 内部的 Frameworks 文件夹中
-        # 并自动修改 Mach-O 的内部链接路径为相对路径（@executable_path），脱离对 CI 环境的依赖
+        # 2. 增强版补丁：深度修复所有依赖项
         echo "=== 正在封装内部动态链接库... ==="
         mkdir -p dmg_source/TextMate.app/Contents/Frameworks
-        dylibbundler -od -b -x dmg_source/TextMate.app/Contents/MacOS/TextMate -d dmg_source/TextMate.app/Contents/Frameworks/ || echo "⚠️ dylibbundler 警告，尝试强制继续..."
+        
+        # 核心改动：
+        # -b: 自动重写主二进制文件
+        # -x: 指定主二进制文件路径
+        # -d: 拷贝 .dylib 到该目录
+        # -p: 关键！指示二进制文件以相对路径去加载这些库
+        # 额外增加查找：因为 TextMate 包含很多支持库，我们需要让 dylibbundler 顺藤摸瓜
+        dylibbundler -od -b \
+          -x dmg_source/TextMate.app/Contents/MacOS/TextMate \
+          -d dmg_source/TextMate.app/Contents/Frameworks/ \
+          -p @executable_path/../Frameworks/
+
+        # 【可选安全保障】深度遍历检测：如果 TextMate 内部有独立生成的其他二进制/动态库，顺带一并修复
+        find dmg_source/TextMate.app -type f \( -name "*.dylib" -o -name "*.so" \) 2>/dev/null | while read -r lib; do
+          dylibbundler -od -x "$lib" -d dmg_source/TextMate.app/Contents/Frameworks/ -p @executable_path/../Frameworks/ || true
+        done
 
         # 3. 彻底清除隔离标记并重新进行临时的深度自签名
+        # 注意：由于修改了内部的库和路径，必须在所有 dylib 修改完成后进行【最深度的自签名】
         echo "=== 正在应用核心签名补丁 ==="
         xattr -cr dmg_source/TextMate.app || true
+        
+        # 使用 --deep 和最高权限重签所有修改过的库
+        find dmg_source/TextMate.app/Contents/Frameworks -type f -name "*.dylib" 2>/dev/null | while read -r dylib; do
+          codesign --force --sign - "$dylib"
+        done
         codesign --force --deep --sign - dmg_source/TextMate.app
 
         # 4. 生成 DMG
