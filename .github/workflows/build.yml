@@ -29,16 +29,24 @@ jobs:
       - name: Build
         run: ninja TextMate
   
-      # ====== 新增：美化打包 DMG ======
+      # ====== 修改后的自动查找并打包步骤 ======
       - name: Package Pretty DMG
         run: |
-          # 1. 定位编译好的 App 路径（根据具体打包输出调整）
-          APP_PATH="build/TextMate.app"
-          if [ ! -d "$APP_PATH" ]; then
-            APP_PATH="TextMate.app"
+          # 1. 自动在全球目录中查找 TextMate.app 的实际位置
+          echo "正在寻找编译好的 TextMate.app..."
+          REAL_APP_PATH=$(find . -name "TextMate.app" -type d -not -path "*/.git/*" | head -n 1)
+          
+          if [ -z "$REAL_APP_PATH" ]; then
+            echo "❌ 错误：在当前项目中没有找到 TextMate.app，请确认 ninja 编译是否成功！"
+            exit 1
           fi
           
-          # 2. 使用 create-dmg 进行美化打包
+          echo "✨ 成功找到 App，实际路径为: $REAL_APP_PATH"
+          
+          # 2. 获取该路径的绝对路径（create-dmg 对绝对路径支持更好）
+          ABS_APP_PATH=$(cd "$(dirname "$REAL_APP_PATH")" && pwd)/$(basename "$REAL_APP_PATH")
+          
+          # 3. 使用绝对路径进行 create-dmg 打包
           create-dmg \
             --volname "TextMate Installation" \
             --window-pos 200 120 \
@@ -48,7 +56,7 @@ jobs:
             --app-drop-link 425 120 \
             --hide-extension "TextMate.app" \
             "TextMate.dmg" \
-            "$APP_PATH"
+            "$ABS_APP_PATH"
   
       # ====== 新增：上传产物 ======
       - name: Upload DMG Artifact
