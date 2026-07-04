@@ -29,7 +29,7 @@ jobs:
       - name: Build
         run: ninja TextMate
 
-      # ====== 完整组装并打包成 DMG ======
+      # ====== 完美组装、自签名并打包成 DMG ======
       - name: Package Pretty DMG
         run: |
           echo "=== 开始组装完整的 TextMate.app ==="
@@ -37,28 +37,25 @@ jobs:
           # 1. 创建标准的临时打包源目录
           mkdir -p dmg_source
           
-          # 2. 将主程序复制进去，并确保命名为 TextMate.app
-          # 兼容处理：无论它原本叫 TextMate 还是 TextMate.app
+          # 2. 抓取主程序名字（使用 -a 保持原有的软链接和元数据，不破坏 App 结构）
           TARGET_NAME=$(ls Applications/ | head -n 1)
-          cp -R "Applications/$TARGET_NAME" "dmg_source/TextMate.app"
+          cp -a "Applications/$TARGET_NAME" "dmg_source/TextMate.app"
           
-          # 3. 拼装核心依赖：把外部的 Frameworks 和 PlugIns 塞进 App 内部结构中
-          # 标准 Mac App 的内部结构是：TextMate.app/Contents/Frameworks/ 
-          echo "正在注入 Frameworks 和 PlugIns 到 App 内部..."
+          # 3. 精准拼装核心依赖
           mkdir -p "dmg_source/TextMate.app/Contents/Frameworks"
           mkdir -p "dmg_source/TextMate.app/Contents/PlugIns"
           
           if [ -d "Frameworks" ]; then
-            cp -R Frameworks/* "dmg_source/TextMate.app/Contents/Frameworks/"
+            cp -a Frameworks/* "dmg_source/TextMate.app/Contents/Frameworks/"
           fi
           
           if [ -d "PlugIns" ]; then
-            cp -R PlugIns/* "dmg_source/TextMate.app/Contents/PlugIns/"
+            cp -a PlugIns/* "dmg_source/TextMate.app/Contents/PlugIns/"
           fi
   
-          # 4. 验证 App 结构是否完整
-          echo "=== 组装后的 App 内部结构 ==="
-          ls -la "dmg_source/TextMate.app/Contents"
+          # 4. 在 CI 环境内执行 Ad-hoc 自签名（解决“应用已损坏”的核心）
+          echo "=== 正在对拼装完整的 App 进行自签名 ==="
+          codesign --force --deep --sign - "dmg_source/TextMate.app"
           
           # 5. 执行 create-dmg 美化打包
           create-dmg \
