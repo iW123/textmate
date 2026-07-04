@@ -219,10 +219,35 @@ static FFResultNode* PreviousNode (FFResultNode* node)
 
 		self.imageView          = imageView;
 		self.textField          = textField;
+		
+		self.imageView.wantsLayer = YES;
+		NSClickGestureRecognizer* click = [[NSClickGestureRecognizer alloc] initWithTarget:self action:@selector(WSOpenInFinder)];
+		[self.imageView addGestureRecognizer:click];
+		//self.imageView.userInteractionEnabled = YES;
+		self.textField.selectable = YES;
+		self.textField.editable = NO;
+		self.textField.enabled = YES;
+		self.textField.wantsLayer = YES;
+		NSClickGestureRecognizer* click2 = [[NSClickGestureRecognizer alloc] initWithTarget:self action:@selector(WSOpenInFinder)];
+		[self.textField addGestureRecognizer:click2];
+		//self.textField.userInteractionEnabled = YES;
+		
 		self.countOfLeafsButton = countOfLeafs;
 		self.removeButton       = remove;
 	}
 	return self;
+}
+
+- (void)WSOpenInFinder
+{
+    FFResultNode* item = self.objectValue;
+
+    NSString* path = item.document.path;
+    if (path)
+    {
+        [[NSWorkspace sharedWorkspace] selectFile:path
+                         inFileViewerRootedAtPath:@""];
+    }
 }
 
 - (void)dealloc
