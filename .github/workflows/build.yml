@@ -43,13 +43,11 @@ jobs:
         run: |
           ninja -j$(sysctl -n hw.logicalcpu) TextMate
 
-      # =========================
-      # Find app (auto detect path)
-      # =========================
-      - name: Locate TextMate.app
+      - name: Debug output
         run: |
-          find . -name "TextMate.app" -maxdepth 6 || true
-
+          find . -maxdepth 10 -name "*.app"
+          ls -R | head -200
+          
       # =========================
       # Upload artifact
       # =========================
@@ -57,5 +55,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: TextMate
-          path: |
-            **/TextMate.app
+          path: "**/TextMate.app"
+          if-no-files-found: error
