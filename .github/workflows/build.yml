@@ -36,65 +36,33 @@ jobs:
 
     - name: Create DMG & Fix Dependencies
       run: |
-        echo "=== Locate built TextMate.app ==="
+        echo "=== 提取并规范化 TextMate.app ==="
         mkdir -p dmg_source
-
+        
+        # 1. 寻找编译出的原始目标并迁移
         REAL_APP=$(find . $HOME -name "TextMate.app" -type d -not -path "*/.git/*" -not -path "*/.deps/*" 2>/dev/null | head -n 1)
-
+        
         if [ -z "$REAL_APP" ] && [ -d "Applications/TextMate" ]; then
-          echo "Using fallback Applications/TextMate"
           mkdir -p dmg_source/TextMate.app/Contents/MacOS
           cp -a Applications/TextMate dmg_source/TextMate.app/Contents/MacOS/TextMate
-
-          cat > dmg_source/TextMate.app/Contents/Info.plist <<EOF
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
-            <dict>
-              <key>CFBundleExecutable</key><string>TextMate</string>
-              <key>CFBundleIdentifier</key><string>com.textmate.TextMate</string>
-              <key>CFBundleName</key><string>TextMate</string>
-              <key>CFBundlePackageType</key><string>APPL</string>
-              <key>CFBundleShortVersionString</key><string>2.0</string>
-            </dict>
-            </plist>
-            EOF
+          echo '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>TextMate</string><key>CFBundleIdentifier</key><string>com.textmate.TextMate</string><key>CFBundleName</key><string>TextMate</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleShortVersionString</key><string>2.0</string></dict></plist>' > dmg_source/TextMate.app/Contents/Info.plist
         else
-          echo "Copying REAL_APP: $REAL_APP"
           cp -a "$REAL_APP" dmg_source/
         fi
 
-        APP="dmg_source/TextMate.app"
+        # 2. 关键补丁：修复二进制文件里的 Homebrew 动态库依赖
+        # dylibbundler 会自动把 TextMate 依赖的外部 .dylib 文件拷贝到 App 内部的 Frameworks 文件夹中
+        # 并自动修改 Mach-O 的内部链接路径为相对路径（@executable_path），脱离对 CI 环境的依赖
+        echo "=== 正在封装内部动态链接库... ==="
+        mkdir -p dmg_source/TextMate.app/Contents/Frameworks
+        dylibbundler -od -b -x dmg_source/TextMate.app/Contents/MacOS/TextMate -d dmg_source/TextMate.app/Contents/Frameworks/ || echo "⚠️ dylibbundler 警告，尝试强制继续..."
 
-        echo "=== Clean quarantine attributes ==="
-        xattr -cr "$APP" || true
+        # 3. 彻底清除隔离标记并重新进行临时的深度自签名
+        echo "=== 正在应用核心签名补丁 ==="
+        xattr -cr dmg_source/TextMate.app || true
+        codesign --force --deep --sign - dmg_source/TextMate.app
 
-        echo "=== Collect all Mach-O binaries ==="
-        BINS=$(find "$APP" -type f | while read f; do file "$f" | grep -q "Mach-O" && echo "$f"; done)
-
-        echo "=== Bundling dependencies (Frameworks) ==="
-        mkdir -p "$APP/Contents/Frameworks"
-
-        for bin in $BINS; do
-          echo "Processing: $bin"
-          dylibbundler -od -b -x "$bin" -d "$APP/Contents/Frameworks/" || true
-        done
-
-        echo "=== Fixing capnp path issues (libs -> Frameworks compatibility) ==="
-        for bin in $BINS; do
-          otool -L "$bin" | grep capnp | awk '{print $1}' | while read lib; do
-            [ -z "$lib" ] && continue
-            install_name_tool -change \
-              "$lib" \
-              "@executable_path/../Frameworks/$(basename $lib)" \
-              "$bin" || true
-          done
-        done
-
-        echo "=== Re-signing app (ad-hoc, CI-safe) ==="
-        codesign --force --deep --sign - "$APP" || true
-
-        echo "=== Building DMG ==="
+        # 4. 生成 DMG
         create-dmg \
           --volname "TextMate Installation" \
           --window-pos 200 120 \
@@ -104,7 +72,7 @@ jobs:
           --app-drop-link 425 120 \
           --hide-extension "TextMate.app" \
           "TextMate.dmg" \
-          "$APP"
+          "dmg_source/TextMate.app"
 
     - name: Upload DMG Artifact
       uses: actions/upload-artifact@v4
