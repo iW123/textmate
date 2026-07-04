@@ -43,44 +43,72 @@ jobs:
         run: |
           ninja -j$(sysctl -n hw.logicalcpu) TextMate
 
+      - name: Locate output
+        run: |
+          echo "Searching for build output..."
+
+          # 先找 .app
+          APP_PATH=$(find . -name "TextMate.app" | head -n 1)
+
+          if [ -n "$APP_PATH" ]; then
+            echo "FOUND APP: $APP_PATH"
+            echo "APP_PATH=$APP_PATH" >> $GITHUB_ENV
+            echo "TYPE=app" >> $GITHUB_ENV
+          else
+            echo "No .app found, searching binary..."
+
+            BIN_PATH=$(find . -type f -perm -111 -name "TextMate" | head -n 1)
+
+            if [ -z "$BIN_PATH" ]; then
+              echo "❌ No output found"
+              exit 1
+            fi
+
+            echo "BIN_PATH=$BIN_PATH" >> $GITHUB_ENV
+            echo "TYPE=bin" >> $GITHUB_ENV
+          fi
+
       - name: Create DMG
         run: |
           brew install create-dmg
 
-          echo "Searching for TextMate.app..."
+          mkdir -p dist
 
-          APP_PATH=$(find . -maxdepth 12 -name "TextMate.app" | head -n 1)
-
-          if [ -z "$APP_PATH" ]; then
-            echo "⚠️ No .app found, fallback to binary packaging"
-
-            BIN_PATH=$(find . -maxdepth 12 -name "TextMate" | head -n 1)
-
-            if [ -z "$BIN_PATH" ]; then
-              echo "❌ No build output found at all"
-              exit 1
-            fi
-
+          if [ "$TYPE" = "app" ]; then
+            cp -R "$APP_PATH" dist/
+          else
             mkdir -p dist/TextMate.app/Contents/MacOS
             cp "$BIN_PATH" dist/TextMate.app/Contents/MacOS/TextMate
-          else
-            mkdir -p dist
-            cp -R "$APP_PATH" dist/
-          fi
 
-          create-dmg \
-            --volname "TextMate" \
-            --window-size 800 400 \
-            --app-drop-link 600 185 \
-            "TextMate.dmg" \
-            "dist/"
+            cat > dist/TextMate.app/Contents/Info.plist <<EOF
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+              <key>CFBundleName</key>
+              <string>TextMate</string>
+              <key>CFBundleExecutable</key>
+              <string>TextMate</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.textmate.fake</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+            </dict>
+            </plist>
+            EOF
+                      fi
+            
+                      create-dmg \
+                        --volname "TextMate" \
+                        --window-size 800 400 \
+                        --app-drop-link 600 185 \
+                        "TextMate.dmg" \
+                        "dist/"
 
-      # =========================
-      # Upload artifact (修复核心)
-      # =========================
-      - name: Upload TextMate artifact
+      - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: TextMate
+          name: TextMate-dmg
           path: TextMate.dmg
           if-no-files-found: error
