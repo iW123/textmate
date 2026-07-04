@@ -1,4 +1,4 @@
-name: CI
+name: MacOS
 
 on:
   push:
@@ -43,33 +43,30 @@ jobs:
         run: |
           ninja -j$(sysctl -n hw.logicalcpu) TextMate
 
-      # =========================
-      # Debug (关键修复)
-      # =========================
-      - name: Debug output
-        run: |
-          echo "==== find .app ===="
-          find . -maxdepth 10 -name "*.app"
-
-          echo "==== find TextMate ===="
-          find . -maxdepth 10 -name "*TextMate*"
-
-          echo "==== build tree ===="
-          ls -R build || true
-
       - name: Create DMG
         run: |
           brew install create-dmg
 
-          APP_PATH=$(find . -maxdepth 10 -name "TextMate.app" | head -n 1)
+          echo "Searching for TextMate.app..."
+
+          APP_PATH=$(find . -maxdepth 12 -name "TextMate.app" | head -n 1)
 
           if [ -z "$APP_PATH" ]; then
-            echo "❌ No TextMate.app found, cannot create dmg"
-            exit 1
-          fi
+            echo "⚠️ No .app found, fallback to binary packaging"
 
-          mkdir -p dist
-          cp -R "$APP_PATH" dist/
+            BIN_PATH=$(find . -maxdepth 12 -name "TextMate" | head -n 1)
+
+            if [ -z "$BIN_PATH" ]; then
+              echo "❌ No build output found at all"
+              exit 1
+            fi
+
+            mkdir -p dist/TextMate.app/Contents/MacOS
+            cp "$BIN_PATH" dist/TextMate.app/Contents/MacOS/TextMate
+          else
+            mkdir -p dist
+            cp -R "$APP_PATH" dist/
+          fi
 
           create-dmg \
             --volname "TextMate" \
