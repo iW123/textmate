@@ -1229,52 +1229,50 @@ static NSButton* OakCreateHistoryButton (NSString* toolTip)
 {
     OakDocument* doc = item.document;
     
-    // 提取公共的高亮和激活逻辑，传入真正生效的 document 实例
+    // 💡 修复核心：在 Block 外部，提前把 C++ 容器转换为 OC 字典
+    NSMutableDictionary* captures = [NSMutableDictionary dictionary];
+    for(auto pair : item.match.captures) {
+        captures[to_ns(pair.first)] = to_ns(pair.second);
+    }
+    NSDictionary* safeCaptures = [captures copy];
+    
+    // 提取公共的高亮和激活逻辑
     void (^setupSelectionBlock)(OakDocument *) = ^(OakDocument *targetDoc) {
         if (!targetDoc) return;
         
-        // 1. 确保窗口可见并置顶
+        // 1. 确保窗口可见
         if (targetDoc.window) {
             [targetDoc.window makeKeyAndOrderFront:nil];
         } else if (targetDoc.windowControllers.count > 0) {
-            // 有些 NSDocument 结构中，窗口在 windowController 里
             [[targetDoc.windowControllers firstObject].window makeKeyAndOrderFront:nil];
         }
         
         [NSApp activateIgnoringOtherApps:YES];
         
-        // 2. 传递捕获组数据
-        NSMutableDictionary* captures = [NSMutableDictionary dictionary];
-        for(auto pair : item.match.captures) {
-            captures[to_ns(pair.first)] = to_ns(pair.second);
-        }
-        targetDoc.matchCaptures = [captures copy];
+        // 2. 直接使用外部转换好的安全字典
+        targetDoc.matchCaptures = safeCaptures;
         
-        // 3. 通知代理选中范围
+        // 3. 通知代理
         if ([self->_delegate respondsToSelector:@selector(selectRange:inDocument:)]) {
             [self->_delegate selectRange:item.match.range inDocument:targetDoc];
         }
     };
 
     if(!doc.isOpen) {
-        // ⭐ 关键修改：在 completionHandler 回调中处理后续逻辑
         [[NSDocumentController sharedDocumentController]
             openDocumentWithContentsOfURL:doc.fileURL
                                   display:YES
                         completionHandler:^(NSDocument * _Nullable openedDocument, BOOL documentWasAlreadyOpen, NSError * _Nullable error) {
             
-            // 确保切换回主线程（虽然 completionHandler 通常在主线程，但这样更安全）
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (error || !openedDocument) {
                     NSLog(@"打开文档失败: %@", error);
                     return;
                 }
-                // 使用系统返回的、真正打开的那个 document 实例
                 setupSelectionBlock((OakDocument *)openedDocument);
             });
         }];
     } else {
-        // 如果已经打开，直接在当前主线程循环的末尾执行（或者直接执行）
         dispatch_async(dispatch_get_main_queue(), ^{
             setupSelectionBlock(doc);
         });
