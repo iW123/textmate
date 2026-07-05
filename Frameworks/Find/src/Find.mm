@@ -1236,7 +1236,16 @@ static NSButton* OakCreateHistoryButton (NSString* toolTip)
 		captures[to_ns(pair.first)] = to_ns(pair.second);
 	doc.matchCaptures = [captures copy];
 
-	[_delegate selectRange:item.match.range inDocument:doc];
+//	[_delegate selectRange:item.match.range inDocument:doc];
+    if (_delegate) {
+        [_delegate selectRange:item.match.range inDocument:item.document];
+    } else {
+        [OakDocumentController.sharedInstance
+            showDocument:item.document
+               andSelect:item.match.range
+               inProject:nil
+           bringToFront:YES];
+    }
 }
 
 - (void)didDoubleClickResult:(FFResultNode*)item
