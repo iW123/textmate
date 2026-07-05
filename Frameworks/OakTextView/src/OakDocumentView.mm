@@ -367,7 +367,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		gutterView.selectionBorderColor      = [NSColor colorWithCGColor:styles.selectionBorder];
 		gutterScrollView.backgroundColor     = gutterView.backgroundColor;
         gutterScrollView.appearance          = textScrollView.effectiveAppearance;
-        gutterScrollView.allowsVibrancy      = NO;
+        gutterScrollView.allowsVibrancy      = YES;
 		gutterDividerView.activeBackgroundColor = [NSColor colorWithCGColor:styles.divider];
 
 		[gutterView setNeedsDisplay:YES];
@@ -665,8 +665,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 - (CGFloat)widthForColumnWithIdentifier:(id)columnIdentifier
 {
 //	return floor((self.lineHeight-1) / 2) * 2 + 1;
-    CGFloat base = self.lineHeight;
-    return MAX(28, ceil(base * 1.8));
+    return 32;
 }
 
 - (NSImage*)imageForLine:(NSUInteger)lineNumber inColumnWithIdentifier:(id)columnIdentifier state:(GutterViewRowState)rowState
