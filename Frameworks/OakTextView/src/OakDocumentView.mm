@@ -354,7 +354,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		[self updateGutterViewFont:self]; // trigger update of gutter view’s line number font
 		auto const& styles = theme->gutter_styles();
 
-        gutterView.foregroundColor = [NSColor whiteColor];
+        gutterView.foregroundColor = [NSColor greenColor];
         gutterView.backgroundColor = [NSColor redColor];
 		gutterView.iconColor                 = [NSColor colorWithCGColor:styles.icons];
 		gutterView.iconHoverColor            = [NSColor colorWithCGColor:styles.iconsHover];
