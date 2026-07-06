@@ -664,7 +664,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 
 - (CGFloat)widthForColumnWithIdentifier:(id)columnIdentifier
 {
-    return 32.0f;
+    return 52.0f;
 }
 
 - (NSImage*)imageForLine:(NSUInteger)lineNumber inColumnWithIdentifier:(id)columnIdentifier state:(GutterViewRowState)rowState
