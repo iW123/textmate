@@ -1,556 +1,797 @@
+#import "OakDocumentView.h"
 #import "GutterView.h"
+#import "OTVStatusBar.h"
+#import <document/OakDocument.h>
+#import <file/type.h>
+#import <text/ctype.h>
+#import <text/parse.h>
+#import <ns/ns.h>
+#import <oak/debug.h>
+#import <bundles/bundles.h>
+#import <settings/settings.h>
+#import <OakFilterList/SymbolChooser.h>
+#import <OakFoundation/NSString Additions.h>
 #import <OakAppKit/OakAppKit.h>
 #import <OakAppKit/NSImage Additions.h>
-#import <OakFoundation/OakFoundation.h>
-#import <OakFoundation/NSString Additions.h>
-#import <Preferences/Keys.h>
-#import <text/types.h>
-#import <cf/cf.h>
-#import <cf/cgrect.h>
-#import <crash/info.h>
-#import <oak/debug.h>
-#import <oak/oak.h>
+#import <OakAppKit/OakToolTip.h>
+#import <OakAppKit/OakPasteboardChooser.h>
+#import <OakAppKit/OakPasteboard.h>
+#import <OakAppKit/OakUIConstructionFunctions.h>
+#import <OakAppKit/NSMenuItem Additions.h>
+#import <BundleMenu/BundleMenu.h>
 
-NSString* GVColumnDataSourceDidChange   = @"GVColumnDataSourceDidChange";
-NSString* GVLineNumbersColumnIdentifier = @"lineNumbers";
+static NSString* const kUserDefaultsLineNumberScaleFactorKey = @"lineNumberScaleFactor";
+static NSString* const kUserDefaultsLineNumberFontNameKey    = @"lineNumberFontName";
 
-static CGFloat WidthOfLineNumbers (NSUInteger lineNumber, NSFont* font);
+static NSString* const kBookmarksColumnIdentifier = @"bookmarks";
+static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 
-struct data_source_t
+@interface OakDocumentView () <NSAccessibilityGroup, GutterViewDelegate, GutterViewColumnDataSource, GutterViewColumnDelegate, OTVStatusBarDelegate>
 {
-	data_source_t (std::string const& identifier, id datasource, id delegate) : identifier(identifier), datasource(datasource), delegate(delegate) { }
+	NSScrollView* gutterScrollView;
+	GutterView* gutterView;
+	NSMutableDictionary* gutterImages;
 
-	std::string identifier;
-	__weak id <GutterViewColumnDataSource> datasource;
-	__weak id <GutterViewColumnDelegate> delegate;
-	CGFloat x0;
-	CGFloat width;
-};
+	OakBackgroundFillView* gutterDividerView;
 
-@interface GutterView () <OakUserDefaultsObserver>
-{
-	std::vector<data_source_t> columnDataSources;
-	NSMutableSet* hiddenColumns;
-	std::string highlightedRange;
-	std::vector<CGRect> backgroundRects, borderRects;
+	NSScrollView* textScrollView;
 
-	NSPoint mouseDownAtPoint;
-	NSPoint mouseHoveringAtPoint;
+	NSMutableArray* topAuxiliaryViews;
+	NSMutableArray* bottomAuxiliaryViews;
+
+	IBOutlet NSPanel* tabSizeSelectorPanel;
 }
-@property (nonatomic) NSSize size;
-@property (nonatomic) BOOL antiAlias;
-- (CGFloat)widthForColumnWithIdentifier:(std::string const&)identifier;
-- (data_source_t*)columnWithIdentifier:(std::string const&)identifier;
-
-- (void)clearTrackingRects;
-- (void)setupTrackingRects;
+@property (nonatomic, readonly) OTVStatusBar* statusBar;
+@property (nonatomic) SymbolChooser* symbolChooser;
+@property (nonatomic) NSArray* observedKeys;
+- (void)updateStyle;
 @end
 
-@implementation GutterView
-// ==================
-// = Setup/Teardown =
-// ==================
-
-- (id)initWithFrame:(NSRect)frame
+@implementation OakDocumentView
+- (id)initWithFrame:(NSRect)aRect
 {
-	if(self = [super initWithFrame:frame])
+	if(self = [super initWithFrame:aRect])
 	{
-		id fontName = [NSUserDefaults.standardUserDefaults objectForKey:@"NSFixedPitchFont"];
-		id fontSize = [NSUserDefaults.standardUserDefaults objectForKey:@"NSFixedPitchFontSize"];
-		crash_reporter_info_t info("User has font name override %s, size %s", BSTR(fontName), BSTR(fontSize));
-		if(fontName) info << "font name: " << [[fontName description] UTF8String];
-		if(fontSize) info << "font size: " << [[fontSize description] UTF8String];
+		self.accessibilityRole  = NSAccessibilityGroupRole;
+		self.accessibilityLabel = @"Editor";
 
-		hiddenColumns       = [NSMutableSet new];
-		self.lineNumberFont = [NSFont userFixedPitchFontOfSize:12];
-		[self insertColumnWithIdentifier:GVLineNumbersColumnIdentifier atPosition:0 dataSource:nil delegate:nil];
+		_textView = [[OakTextView alloc] initWithFrame:NSZeroRect];
+		_textView.autoresizingMask = NSViewWidthSizable|NSViewHeightSizable;
 
-		mouseDownAtPoint     = NSMakePoint(-1, -1);
-		mouseHoveringAtPoint = NSMakePoint(-1, -1);
+		textScrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
+		textScrollView.hasVerticalScroller      = YES;
+		textScrollView.verticalScrollElasticity = NSScrollElasticityAllowed;
+		textScrollView.hasHorizontalScroller    = YES;
+		textScrollView.autohidesScrollers       = YES;
+		textScrollView.borderType               = NSNoBorder;
+		textScrollView.documentView             = _textView;
 
-		[self userDefaultsDidChange:nil];
+		gutterView = [[GutterView alloc] initWithFrame:NSZeroRect];
+		gutterView.partnerView = _textView;
+		gutterView.delegate    = self;
+		[gutterView insertColumnWithIdentifier:kBookmarksColumnIdentifier atPosition:0 dataSource:self delegate:self];
+		[gutterView insertColumnWithIdentifier:kFoldingsColumnIdentifier atPosition:2 dataSource:self delegate:self];
+		if([NSUserDefaults.standardUserDefaults boolForKey:@"DocumentView Disable Line Numbers"])
+			[gutterView setVisibility:NO forColumnWithIdentifier:GVLineNumbersColumnIdentifier];
+		[gutterView setTranslatesAutoresizingMaskIntoConstraints:NO];
 
-		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(cursorDidHide:) name:OakCursorDidHideNotification object:nil];
-		OakObserveUserDefaults(self);
+		gutterScrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
+		gutterScrollView.accessibilityElement = NO;
+		gutterScrollView.borderType   = NSNoBorder;
+		gutterScrollView.documentView = gutterView;
+
+		[gutterScrollView.contentView addConstraint:[NSLayoutConstraint constraintWithItem:gutterView attribute:NSLayoutAttributeLeft relatedBy:NSLayoutRelationEqual toItem:gutterScrollView.contentView attribute:NSLayoutAttributeLeft multiplier:1.0 constant:0.0]];
+		[gutterScrollView.contentView addConstraint:[NSLayoutConstraint constraintWithItem:gutterView attribute:NSLayoutAttributeTop relatedBy:NSLayoutRelationEqual toItem:gutterScrollView.contentView attribute:NSLayoutAttributeTop multiplier:1.0 constant:0.0]];
+		[gutterScrollView.contentView addConstraint:[NSLayoutConstraint constraintWithItem:gutterView attribute:NSLayoutAttributeRight relatedBy:NSLayoutRelationEqual toItem:gutterScrollView.contentView attribute:NSLayoutAttributeRight multiplier:1.0 constant:0.0]];
+
+		gutterDividerView = OakCreateVerticalLine(OakBackgroundFillViewStyleNone);
+
+		_statusBar = [[OTVStatusBar alloc] initWithFrame:NSZeroRect];
+		_statusBar.delegate = self;
+		_statusBar.target = self;
+
+		OakAddAutoLayoutViewsToSuperview(@[ gutterScrollView, gutterDividerView, textScrollView, _statusBar ], self);
+		OakSetupKeyViewLoop(@[ self, _textView, _statusBar ]);
+
+		self.document = [OakDocument documentWithString:@"" fileType:@"text.plain" customName:@"placeholder"];
+
+		self.observedKeys = @[ @"selectionString", @"symbol", @"recordingMacro", @"themeUUID" ];
+		for(NSString* keyPath in self.observedKeys)
+			[_textView addObserver:self forKeyPath:keyPath options:NSKeyValueObservingOptionInitial context:NULL];
 	}
 	return self;
 }
 
-- (void)userDefaultsDidChange:(id)sender
+- (void)updateConstraints
 {
-	self.antiAlias = ![NSUserDefaults.standardUserDefaults boolForKey:kUserDefaultsDisableAntiAliasKey];
+	[self removeConstraints:[self constraints]];
+	[super updateConstraints];
+
+	NSMutableArray* stackedViews = [NSMutableArray array];
+	[stackedViews addObjectsFromArray:topAuxiliaryViews];
+	[stackedViews addObject:gutterScrollView];
+	[stackedViews addObjectsFromArray:bottomAuxiliaryViews];
+
+	if(_statusBar)
+	{
+		[stackedViews addObject:_statusBar];
+		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[_statusBar]|" options:0 metrics:nil views:NSDictionaryOfVariableBindings(_statusBar)]];
+	}
+
+	[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[gutterScrollView(==gutterView)][gutterDividerView][textScrollView(>=100)]|" options:NSLayoutFormatAlignAllTop|NSLayoutFormatAlignAllBottom metrics:nil views:NSDictionaryOfVariableBindings(gutterScrollView, gutterView, gutterDividerView, textScrollView)]];
+	[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[topView]" options:0 metrics:nil views:@{ @"topView": stackedViews[0] }]];
+	[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[bottomView]|" options:0 metrics:nil views:@{ @"bottomView": [stackedViews lastObject] }]];
+
+	for(size_t i = 0; i < [stackedViews count]-1; ++i)
+		[self addConstraint:[NSLayoutConstraint constraintWithItem:stackedViews[i] attribute:NSLayoutAttributeBottom relatedBy:NSLayoutRelationEqual toItem:stackedViews[i+1] attribute:NSLayoutAttributeTop multiplier:1 constant:0]];
+
+	NSArray* array[] = { topAuxiliaryViews, bottomAuxiliaryViews };
+	for(NSArray* views : array)
+	{
+		for(NSView* view in views)
+			[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[view]|" options:0 metrics:nil views:NSDictionaryOfVariableBindings(view)]];
+	}
 }
 
-- (void)updateTrackingAreas
+- (void)setHideStatusBar:(BOOL)flag
 {
-	[super updateTrackingAreas];
-	[self setupTrackingRects];
+	if(_hideStatusBar == flag)
+		return;
+
+	_hideStatusBar = flag;
+	if(_hideStatusBar)
+	{
+		[_statusBar removeFromSuperview];
+		_statusBar.delegate = nil;
+		_statusBar.target = nil;
+		_statusBar = nil;
+	}
+	else
+	{
+		_statusBar = [[OTVStatusBar alloc] initWithFrame:NSZeroRect];
+		_statusBar.delegate = self;
+		_statusBar.target = self;
+
+		OakAddAutoLayoutViewsToSuperview(@[ _statusBar ], self);
+	}
+	[self setNeedsUpdateConstraints:YES];
 }
 
-- (void)viewDidMoveToWindow
+- (CGFloat)lineHeight
 {
-	[NSNotificationCenter.defaultCenter removeObserver:self name:NSWindowDidResignKeyNotification object:nil];
-	if(self.window)
-		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(windowDidResignKey:) name:NSWindowDidResignKeyNotification object:self.window];
+	return round(std::min(1.5 * [_textView.font capHeight], [_textView.font ascender] - [_textView.font descender] + [_textView.font leading]));
 }
 
-- (void)windowDidResignKey:(NSNotification*)notification
+- (NSImage*)gutterImage:(NSString*)aName
 {
-	[self mouseExited:[NSApp currentEvent]];
+	id res = gutterImages[aName];
+	if(!res)
+	{
+		gutterImages = gutterImages ?: [NSMutableDictionary new];
+
+		NSImage* image = [aName hasPrefix:@"/"] ? [[NSImage alloc] initWithContentsOfFile:aName] : [NSImage imageNamed:aName inSameBundleAsClass:[self class]];
+		if(!image && ![aName hasPrefix:@"/"] && ![aName hasSuffix:@" Template"])
+			image = [NSImage imageNamed:[aName stringByAppendingString:@" Template"] inSameBundleAsClass:[self class]];
+
+		if([aName hasPrefix:@"/"] && [[aName stringByDeletingPathExtension] hasSuffix:@" Template"])
+			[image setTemplate:YES];
+
+		if(image)
+		{
+			CGFloat imageWidth  = image.size.width;
+			CGFloat imageHeight = image.size.height;
+
+			CGFloat viewWidth   = [self widthForColumnWithIdentifier:nil];
+			CGFloat viewHeight  = self.lineHeight;
+
+			res = image = [image copy];
+
+			if(imageWidth / imageHeight < viewWidth / viewHeight)
+					image.size = NSMakeSize(round(viewHeight * imageWidth / imageHeight), viewHeight);
+			else	image.size = NSMakeSize(viewWidth, round(viewWidth * imageHeight / imageWidth));
+		}
+		else
+		{
+			res = [NSNull null];
+			NSLog(@"%s no image named ‘%@’", sel_getName(_cmd), aName);
+		}
+
+		gutterImages[aName] = res;
+	}
+	return res == [NSNull null] ? nil : res;
+}
+
+- (void)updateGutterViewFont:(id)sender
+{
+	CGFloat const scaleFactor = [NSUserDefaults.standardUserDefaults floatForKey:kUserDefaultsLineNumberScaleFactorKey] ?: 0.8;
+	NSString* lineNumberFontName = [NSUserDefaults.standardUserDefaults stringForKey:kUserDefaultsLineNumberFontNameKey] ?: [_textView.font fontName];
+
+	gutterImages = nil; // force image sizes to be recalculated
+	gutterView.lineNumberFont = [NSFont fontWithName:lineNumberFontName size:round(scaleFactor * [_textView.font pointSize] * _textView.fontScaleFactor)];
+	[gutterView reloadData:self];
+}
+
+- (IBAction)makeTextLarger:(id)sender
+{
+	_textView.fontScaleFactor += 0.1;
+	[self updateGutterViewFont:self];
+}
+
+- (IBAction)makeTextSmaller:(id)sender
+{
+	if(_textView.fontScaleFactor > 0.1)
+	{
+		_textView.fontScaleFactor -= 0.1;
+		[self updateGutterViewFont:self];
+	}
+}
+
+- (IBAction)makeTextStandardSize:(id)sender
+{
+	_textView.fontScaleFactor = 1;
+	[self updateGutterViewFont:self];
+}
+
+- (void)changeFont:(id)sender
+{
+	NSFont* defaultFont = [NSFont userFixedPitchFontOfSize:0];
+	if(NSFont* newFont = [sender convertFont:_textView.font ?: defaultFont])
+	{
+		std::string fontName = [newFont.fontName isEqualToString:defaultFont.fontName] ? NULL_STR : to_s(newFont.fontName);
+		settings_t::set(kSettingsFontNameKey, fontName);
+		settings_t::set(kSettingsFontSizeKey, [newFont pointSize]);
+		_textView.font = newFont;
+		[self updateGutterViewFont:self];
+	}
+}
+
+- (void)observeValueForKeyPath:(NSString*)aKeyPath ofObject:(id)observableController change:(NSDictionary*)changeDictionary context:(void*)userData
+{
+	if([aKeyPath isEqualToString:@"selectionString"])
+	{
+		NSString* str = [_textView valueForKey:@"selectionString"];
+		[gutterView setHighlightedRange:to_s(str ?: @"1")];
+		[_statusBar setSelectionString:str];
+		_symbolChooser.selectionString = str;
+	}
+	else if([aKeyPath isEqualToString:@"symbol"])
+	{
+		_statusBar.symbolName = _textView.symbol;
+	}
+	else if([aKeyPath isEqualToString:@"recordingMacro"])
+	{
+		_statusBar.recordingMacro = _textView.isRecordingMacro;
+	}
+	else if([aKeyPath isEqualToString:@"fileType"])
+	{
+		_statusBar.fileType = self.document.fileType;
+	}
+	else if([aKeyPath isEqualToString:@"tabSize"])
+	{
+		_statusBar.tabSize = self.document.tabSize;
+	}
+	else if([aKeyPath isEqualToString:@"softTabs"])
+	{
+		_statusBar.softTabs = self.document.softTabs;
+	}
+	else if([aKeyPath isEqualToString:@"themeUUID"])
+	{
+		[self updateStyle];
+	}
 }
 
 - (void)dealloc
 {
-	for(auto const& it : columnDataSources)
-	{
-		if(it.datasource)
-			[NSNotificationCenter.defaultCenter removeObserver:self name:GVColumnDataSourceDidChange object:it.datasource];
-	}
+	for(NSString* keyPath in self.observedKeys)
+		[_textView removeObserver:self forKeyPath:keyPath];
 	[NSNotificationCenter.defaultCenter removeObserver:self];
+
+	self.document = nil;
+	self.symbolChooser = nil;
 }
 
-- (void)setupSelectionRects
+- (void)setDocument:(OakDocument*)aDocument
 {
-	backgroundRects.clear();
-	borderRects.clear();
+	NSArray* const documentKeys = @[ @"fileType", @"tabSize", @"softTabs" ];
 
-	for(auto const& range : text::selection_t(highlightedRange))
+	OakDocument* oldDocument = self.document;
+	if(oldDocument)
 	{
-		auto from = range.min(), to = range.max();
-		CGFloat firstY = [self.delegate lineFragmentForLine:from.line column:from.column].firstY;
-		auto fragment = [self.delegate lineFragmentForLine:to.line column:to.column];
-		CGFloat lastY = to.column == 0 && from.line != to.line ? fragment.firstY : fragment.lastY;
+		for(NSString* key in documentKeys)
+			[oldDocument removeObserver:self forKeyPath:key];
+		[NSNotificationCenter.defaultCenter removeObserver:self name:OakDocumentMarksDidChangeNotification object:oldDocument];
+	}
 
-		backgroundRects.push_back(CGRectMake(0, firstY+1, self.frame.size.width, lastY - firstY - 2));
-		borderRects.push_back(CGRectMake(0, firstY, self.frame.size.width, 1));
-		borderRects.push_back(CGRectMake(0, lastY-1, self.frame.size.width, 1));
+	if(aDocument)
+		[aDocument loadModalForWindow:self.window completionHandler:nullptr];
+
+	if(_document = aDocument)
+	{
+		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(documentMarksDidChange:) name:OakDocumentMarksDidChangeNotification object:self.document];
+		for(NSString* key in documentKeys)
+			[self.document addObserver:self forKeyPath:key options:NSKeyValueObservingOptionInitial context:nullptr];
+	}
+
+	[_textView setDocument:self.document];
+	[gutterView reloadData:self];
+	[self updateStyle];
+
+	if(_symbolChooser)
+	{
+		_symbolChooser.TMDocument      = self.document;
+		_symbolChooser.selectionString = _textView.selectionString;
+	}
+
+	if(oldDocument)
+		[oldDocument close];
+}
+
+- (void)updateStyle
+{
+	if(theme_ptr theme = _textView.theme)
+	{
+		[textScrollView setBackgroundColor:NSColor.greenColor];
+		[textScrollView setScrollerKnobStyle:theme->is_dark() ? NSScrollerKnobStyleLight : NSScrollerKnobStyleDark];
+
+		if(@available(macOS 10.14, *))
+		{
+			[_textView setIbeamCursor:NSCursor.IBeamCursor];
+		}
+		else
+		{
+			if(theme->is_dark())
+			{
+				NSImage* whiteIBeamImage = [NSImage imageNamed:@"IBeam white" inSameBundleAsClass:[self class]];		
+				[whiteIBeamImage setSize:NSCursor.IBeamCursor.image.size];
+				[_textView setIbeamCursor:[[NSCursor alloc] initWithImage:whiteIBeamImage hotSpot:NSMakePoint(4, 9)]];
+			}
+			else
+			{
+				[_textView setIbeamCursor:NSCursor.IBeamCursor];
+			}
+		}
+
+		[self updateGutterViewFont:self]; // trigger update of gutter view’s line number font
+		auto const& styles = theme->gutter_styles();
+
+        gutterView.foregroundColor = NSColor.whiteColor;
+        gutterView.backgroundColor = NSColor.redColor;
+		gutterView.iconColor                 = [NSColor colorWithCGColor:styles.icons];
+		gutterView.iconHoverColor            = [NSColor colorWithCGColor:styles.iconsHover];
+		gutterView.iconPressedColor          = [NSColor colorWithCGColor:styles.iconsPressed];
+		gutterView.selectionForegroundColor  = [NSColor colorWithCGColor:styles.selectionForeground];
+		gutterView.selectionBackgroundColor  = [NSColor colorWithCGColor:styles.selectionBackground];
+		gutterView.selectionIconColor        = [NSColor colorWithCGColor:styles.selectionIcons];
+		gutterView.selectionIconHoverColor   = [NSColor colorWithCGColor:styles.selectionIconsHover];
+		gutterView.selectionIconPressedColor = [NSColor colorWithCGColor:styles.selectionIconsPressed];
+		gutterView.selectionBorderColor      = [NSColor colorWithCGColor:styles.selectionBorder];
+		gutterScrollView.backgroundColor     = gutterView.backgroundColor;
+		gutterDividerView.activeBackgroundColor = [NSColor colorWithCGColor:styles.divider];
+
+		[gutterView setNeedsDisplay:YES];
 	}
 }
 
-// =============
-// = Accessors =
-// =============
-
-- (void)setHighlightedRange:(std::string const&)str
+- (IBAction)toggleLineNumbers:(id)sender
 {
-	std::vector<CGRect> oldBackgroundRects, oldBorderRects, refreshRects;
-	backgroundRects.swap(oldBackgroundRects);
-	borderRects.swap(oldBorderRects);
-
-	highlightedRange = str;
-	[self setupSelectionRects];
-
-	OakRectSymmetricDifference(oldBackgroundRects, backgroundRects,    back_inserter(refreshRects));
-	OakRectSymmetricDifference(oldBorderRects,     borderRects,        back_inserter(refreshRects));
-	for(auto const& rect : refreshRects)
-		[self setNeedsDisplayInRect:rect];
+	BOOL isVisibleFlag = ![gutterView visibilityForColumnWithIdentifier:GVLineNumbersColumnIdentifier];
+	[gutterView setVisibility:isVisibleFlag forColumnWithIdentifier:GVLineNumbersColumnIdentifier];
+	if(isVisibleFlag)
+			[NSUserDefaults.standardUserDefaults removeObjectForKey:@"DocumentView Disable Line Numbers"];
+	else	[NSUserDefaults.standardUserDefaults setObject:@YES forKey:@"DocumentView Disable Line Numbers"];
 }
 
-- (void)setPartnerView:(NSView*)aView
+- (BOOL)validateMenuItem:(NSMenuItem*)aMenuItem
 {
-	if(_partnerView)
-		[NSNotificationCenter.defaultCenter removeObserver:self];
-	if(_partnerView = aView)
+	if([aMenuItem action] == @selector(toggleLineNumbers:))
+		[aMenuItem setTitle:[gutterView visibilityForColumnWithIdentifier:GVLineNumbersColumnIdentifier] ? @"Hide Line Numbers" : @"Show Line Numbers"];
+	else if([aMenuItem action] == @selector(takeTabSizeFrom:))
+		[aMenuItem setState:_textView.tabSize == [aMenuItem tag] ? NSControlStateValueOn : NSControlStateValueOff];
+	else if([aMenuItem action] == @selector(showTabSizeSelectorPanel:))
 	{
-		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(boundsDidChange:) name:NSViewBoundsDidChangeNotification object:[[_partnerView enclosingScrollView] contentView]];
-		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(boundsDidChange:) name:NSViewFrameDidChangeNotification object:_partnerView];
+		static NSInteger const predefined[] = { 2, 3, 4, 8 };
+		if(oak::contains(std::begin(predefined), std::end(predefined), _textView.tabSize))
+		{
+			[aMenuItem setTitle:@"Other…"];
+			[aMenuItem setState:NSControlStateValueOff];
+		}
+		else
+		{
+			[aMenuItem setDynamicTitle:[NSString stringWithFormat:@"Other (%zd)…", _textView.tabSize]];
+			[aMenuItem setState:NSControlStateValueOn];
+		}
 	}
-}
-
-- (void)insertColumnWithIdentifier:(NSString*)columnIdentifier atPosition:(NSUInteger)index dataSource:(id <GutterViewColumnDataSource>)columnDataSource delegate:(id <GutterViewColumnDelegate>)columnDelegate
-{
-	ASSERT(index <= columnDataSources.size());
-	columnDataSources.insert(columnDataSources.begin() + index, data_source_t(columnIdentifier.UTF8String, columnDataSource, columnDelegate));
-	if(columnDelegate)
-		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(columnDataSourceDidChange:) name:GVColumnDataSourceDidChange object:columnDelegate];
-	[self reloadData:self];
-}
-
-- (BOOL)isFlipped
-{
+	else if([aMenuItem action] == @selector(setIndentWithTabs:))
+		[aMenuItem setState:_textView.softTabs ? NSControlStateValueOff : NSControlStateValueOn];
+	else if([aMenuItem action] == @selector(setIndentWithSpaces:))
+		[aMenuItem setState:_textView.softTabs ? NSControlStateValueOn : NSControlStateValueOff];
+	else if([aMenuItem action] == @selector(takeGrammarUUIDFrom:))
+	{
+		NSString* uuidString = [aMenuItem representedObject];
+		if(bundles::item_ptr bundleItem = bundles::lookup(to_s(uuidString)))
+		{
+			bool selectedGrammar = to_s(self.document.fileType) == bundleItem->value_for_field(bundles::kFieldGrammarScope);
+			[aMenuItem setState:selectedGrammar ? NSControlStateValueOn : NSControlStateValueOff];
+		}
+	}
 	return YES;
 }
 
-- (BOOL)isOpaque
+// ===================
+// = Auxiliary Views =
+// ===================
+
+- (void)addAuxiliaryView:(NSView*)aView atEdge:(NSRectEdge)anEdge
 {
-	return YES;
+	topAuxiliaryViews    = topAuxiliaryViews    ?: [NSMutableArray new];
+	bottomAuxiliaryViews = bottomAuxiliaryViews ?: [NSMutableArray new];
+	if(anEdge == NSMinYEdge)
+			[bottomAuxiliaryViews addObject:aView];
+	else	[topAuxiliaryViews addObject:aView];
+	OakAddAutoLayoutViewsToSuperview(@[ aView ], self);
+	[self setNeedsUpdateConstraints:YES];
 }
 
-- (BOOL)visibilityForColumnWithIdentifier:(NSString*)identifier
+- (void)removeAuxiliaryView:(NSView*)aView
 {
-	return ![hiddenColumns containsObject:identifier];
-}
-
-- (CGFloat)widthForColumnWithIdentifier:(std::string const&)identifier
-{
-	CGFloat width = 0;
-	if(!self.delegate)
-		return 5;
-
-	if(identifier == [GVLineNumbersColumnIdentifier UTF8String])
-	{
-		NSUInteger lastLineNumber = [self.delegate lineRecordForPosition:NSHeight([_partnerView frame])].lineNumber;
-		CGFloat newWidth = WidthOfLineNumbers(lastLineNumber == NSNotFound ? 0 : lastLineNumber + 1, self.lineNumberFont);
-
-		width = [self columnWithIdentifier:identifier]->width;
-		if(width < newWidth || (newWidth < width && WidthOfLineNumbers(lastLineNumber * 4/3, self.lineNumberFont) < width))
-			width = newWidth;
-	}
+	if([topAuxiliaryViews containsObject:aView])
+		[topAuxiliaryViews removeObject:aView];
+	else if([bottomAuxiliaryViews containsObject:aView])
+		[bottomAuxiliaryViews removeObject:aView];
 	else
-	{
-		width = [[self columnWithIdentifier:identifier]->datasource widthForColumnWithIdentifier:[NSString stringWithCxxString:identifier]];
-	}
-
-	return ceil(width);
-}
-
-- (data_source_t*)columnWithIdentifier:(std::string const&)identifier
-{
-	for(auto& it : columnDataSources)
-	{
-		if(it.identifier == identifier)
-			return &it;
-	}
-	ASSERT(false);
-	return NULL;
-}
-
-- (std::vector<data_source_t>)visibleColumnDataSources
-{
-	std::vector<data_source_t> visibleColumnDataSources;
-	for(auto const& it : columnDataSources)
-	{
-		if([self visibilityForColumnWithIdentifier:[NSString stringWithCxxString:it.identifier]])
-			visibleColumnDataSources.push_back(it);
-	}
-	return visibleColumnDataSources;
-}
-
-// ================
-// = Data sources =
-// ================
-
-- (NSImage*)imageForColumn:(std::string const&)identifier atLine:(NSUInteger)lineNumber hovering:(BOOL)hovering pressed:(BOOL)pressed
-{
-	data_source_t* column = [self columnWithIdentifier:identifier];
-	return [column->datasource imageForLine:lineNumber inColumnWithIdentifier:[NSString stringWithCxxString:identifier] state:pressed ? GutterViewRowStatePressed : (hovering ? GutterViewRowStateRollover : GutterViewRowStateRegular)];
-}
-
-// ==========
-// = Events =
-// ==========
-
-- (void)boundsDidChange:(NSNotification*)aNotification
-{
-	[self updateSize];
-	[self.enclosingScrollView.contentView scrollToPoint:NSMakePoint(0, NSMinY(_partnerView.enclosingScrollView.contentView.bounds))];
-}
-
-- (void)setSize:(NSSize)newSize
-{
-	if(NSEqualSizes(_size, newSize))
 		return;
-	_size = newSize;
-	[self invalidateIntrinsicContentSize];
+	[aView removeFromSuperview];
+	[self setNeedsUpdateConstraints:YES];
 }
 
-static CTLineRef CreateCTLineFromText (std::string const& text, NSFont* font, NSColor* color = nil)
+// ======================
+// = Pasteboard History =
+// ======================
+
+- (void)showClipboardHistory:(id)sender
 {
-	CTLineRef res = NULL;
-	if(CFMutableDictionaryRef dict = CFDictionaryCreateMutable(kCFAllocatorDefault, 2, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks))
-	{
-		if(CGColorRef cgColor = [color CGColor])
-			CFDictionaryAddValue(dict, kCTForegroundColorAttributeName, cgColor);
-
-		if(CFStringRef fontName = (CFStringRef)CFBridgingRetain([font fontName]))
-		{
-			if(CTFontRef ctFont = CTFontCreateWithName(fontName, [font pointSize], NULL))
-			{
-				CFDictionaryAddValue(dict, kCTFontAttributeName, ctFont);
-				CFRelease(ctFont);
-			}
-			CFRelease(fontName);
-		}
-
-		if(CFAttributedStringRef str = CFAttributedStringCreate(kCFAllocatorDefault, cf::wrap(text), dict))
-		{
-			res = CTLineCreateWithAttributedString(str);
-			CFRelease(str);
-		}
-
-		CFRelease(dict);
-	}
-	return res;
+	OakPasteboardChooser* chooser = [OakPasteboardChooser sharedChooserForPasteboard:OakPasteboard.generalPasteboard];
+	chooser.action = @selector(paste:);
+	[chooser showWindowRelativeToFrame:[self.window convertRectToScreen:[_textView convertRect:[_textView visibleRect] toView:nil]]];
 }
 
-static CGFloat WidthOfLineNumbers (NSUInteger lineNumber, NSFont* font)
+- (void)showFindHistory:(id)sender
 {
-	CTLineRef line = CreateCTLineFromText(std::to_string(std::max<NSUInteger>(10, lineNumber)), font);
-	CGFloat width  = CTLineGetTypographicBounds(line, NULL, NULL, NULL);
-	CFRelease(line);
-	return ceil(width);
-}
-
-static void DrawText (std::string const& text, CGRect const& rect, CGFloat baseline, NSFont* font, NSColor* color)
-{
-	CGContextRef context = NSGraphicsContext.currentContext.CGContext;
-	CGContextSaveGState(context);
-
-	CTLineRef line = CreateCTLineFromText(text, font, color);
-	CGContextSetTextMatrix(context, CGAffineTransformIdentity);
-	CGContextConcatCTM(context, CGAffineTransformMake(1, 0, 0, -1, 0, 2 * baseline));
-	CGContextSetTextPosition(context, CGRectGetMaxX(rect) - CTLineGetTypographicBounds(line, NULL, NULL, NULL), baseline);
-	CTLineDraw(line, context);
-	CFRelease(line);
-
-	CGContextRestoreGState(context);
-}
-
-- (void)drawRect:(NSRect)aRect
-{
-	[self.backgroundColor set];
-	NSRectFill(NSIntersectionRect(aRect, self.frame));
-
-	[self setupSelectionRects];
-
-	[self.selectionBackgroundColor set];
-	for(auto const& rect : backgroundRects)
-		NSRectFillUsingOperation(NSIntersectionRect(rect, NSIntersectionRect(aRect, self.frame)), NSCompositingOperationSourceOver);
-
-	[self.selectionBorderColor set];
-	for(auto const& rect : borderRects)
-		NSRectFillUsingOperation(NSIntersectionRect(rect, NSIntersectionRect(aRect, self.frame)), NSCompositingOperationSourceOver);
-
-	if(!self.antiAlias)
-		CGContextSetShouldAntialias(NSGraphicsContext.currentContext.CGContext, false);
-
-	std::pair<NSUInteger, NSUInteger> prevLine(NSNotFound, 0);
-	for(CGFloat y = NSMinY(aRect); y < NSMaxY(aRect); )
-	{
-		GVLineRecord record = [self.delegate lineRecordForPosition:y];
-		if(record.lastY <= y || prevLine == std::make_pair(record.lineNumber, record.softlineOffset))
-			break;
-		prevLine = std::make_pair(record.lineNumber, record.softlineOffset);
-
-		BOOL selectedRow = NO;
-		for(auto const& rect : backgroundRects)
-			selectedRow = selectedRow || NSIntersectsRect(rect, NSMakeRect(0, record.firstY, CGRectGetWidth(self.frame), record.lastY - record.firstY));
-
-		for(auto const& dataSource : [self visibleColumnDataSources])
-		{
-			NSRect columnRect = NSMakeRect(dataSource.x0, record.firstY, dataSource.width, record.lastY - record.firstY);
-			if(dataSource.identifier == GVLineNumbersColumnIdentifier.UTF8String)
-			{
-				NSColor* textColor = selectedRow ? self.selectionForegroundColor : self.foregroundColor;
-				DrawText(record.softlineOffset == 0 ? std::to_string(record.lineNumber + 1) : "·", columnRect, NSMinY(columnRect) + record.baseline, self.lineNumberFont, [NSColor systemRedColor]);
-			}
-			else if(record.softlineOffset == 0)
-			{
-				BOOL isHoveringRect = NSMouseInRect(mouseHoveringAtPoint, columnRect, [self isFlipped]);
-				BOOL isDownInRect   = NSMouseInRect(mouseDownAtPoint,     columnRect, [self isFlipped]);
-
-				if(selectedRow && isDownInRect)        [self.selectionIconPressedColor set];
-				else if(selectedRow && isHoveringRect) [self.selectionIconHoverColor   set];
-				else if(selectedRow)                   [self.selectionIconColor        set];
-				else if(isDownInRect)                  [self.iconPressedColor          set];
-				else if(isHoveringRect)                [self.iconHoverColor            set];
-				else                                   [self.iconColor                 set];
-
-				NSImage* image = [self imageForColumn:dataSource.identifier atLine:record.lineNumber hovering:isHoveringRect && NSEqualPoints(mouseDownAtPoint, NSMakePoint(-1, -1)) pressed:isHoveringRect && isDownInRect];
-				if([image size].height > 0 && [image size].width > 0)
-				{
-					// The placement of the center of image is aligned with the center of the capHeight.
-					CGFloat center = record.baseline - ([self.lineNumberFont capHeight] / 2);
-					CGFloat x = round((NSWidth(columnRect) - [image size].width) / 2);
-					CGFloat y = round(center - ([image size].height / 2));
-					NSRect imageRect = NSMakeRect(NSMinX(columnRect) + x, NSMinY(columnRect) + y, [image size].width, [image size].height);
-
-					if(image.isTemplate)
-					{
-						[NSGraphicsContext saveGraphicsState];
-
-						NSAffineTransform* transform = [NSAffineTransform transform];
-						[transform translateXBy:0 yBy:NSMaxY(imageRect)];
-						[transform scaleXBy:1 yBy:-1];
-						[transform concat];
-						imageRect.origin.y = 0;
-
-						CGImageRef cgImage = [image CGImageForProposedRect:&imageRect context:[NSGraphicsContext currentContext] hints:nil];
-						CGContextClipToMask(NSGraphicsContext.currentContext.CGContext, imageRect, cgImage);
-
-						NSRectFillUsingOperation(imageRect, NSCompositingOperationSourceOver);
-						[NSGraphicsContext restoreGraphicsState];
-					}
-					else
-					{
-						[image drawInRect:imageRect];
-					}
-				}
-			}
-		}
-
-		y = record.lastY;
-	}
-}
-
-- (void)updateSize
-{
-	static CGFloat const columnPadding = 1;
-
-	CGFloat currentX = 0, totalWidth = 0;
-	for(auto& it : columnDataSources)
-	{
-		it.x0 = currentX;
-		if([self visibilityForColumnWithIdentifier:[NSString stringWithCxxString:it.identifier]])
-		{
-			it.width   = [self widthForColumnWithIdentifier:it.identifier];
-			totalWidth += it.width + columnPadding;
-			currentX   += it.width + columnPadding;
-		}
-		else
-		{
-			it.width = 0;
-		}
-	}
-
-	NSPoint origin = NSMakePoint(0, NSMinY(_partnerView.enclosingScrollView.contentView.bounds));
-	CGFloat height = std::max(NSHeight(_partnerView.frame), origin.y + NSHeight([self visibleRect]));
-	[self setSize:NSMakeSize(totalWidth, height)];
-}
-
-- (NSSize)intrinsicContentSize
-{
-	return self.size;
-}
-
-- (void)reloadData:(id)sender
-{
-	[self updateSize];
-	[self setNeedsDisplay:YES];
-}
-
-- (NSRect)columnRectForPoint:(NSPoint)aPoint
-{
-	GVLineRecord record = [self.delegate lineRecordForPosition:aPoint.y];
-	if(record.lineNumber != NSNotFound && record.softlineOffset == 0)
-	{
-		for(auto const& dataSource : [self visibleColumnDataSources])
-		{
-			if(dataSource.identifier == [GVLineNumbersColumnIdentifier UTF8String])
-				continue;
-
-			NSRect columnRect = NSMakeRect(dataSource.x0, record.firstY, dataSource.width, record.lastY - record.firstY);
-			if(NSPointInRect(aPoint, columnRect))
-				return columnRect;
-		}
-	}
-	return NSZeroRect;
-}
-
-- (void)mouseDown:(NSEvent*)event
-{
-	NSPoint pos = [self convertPoint:[event locationInWindow] fromView:nil];
-	NSRect columnRect = [self columnRectForPoint:pos];
-	if(NSMouseInRect(pos, columnRect, [self isFlipped]))
-	{
-		mouseDownAtPoint = pos;
-		[self setNeedsDisplayInRect:columnRect];
-
-		while([event type] != NSEventTypeLeftMouseUp)
-		{
-			event = [NSApp nextEventMatchingMask:(NSEventMaskLeftMouseUp|NSEventMaskMouseMoved|NSEventMaskLeftMouseDragged|NSEventMaskMouseEntered|NSEventMaskMouseExited) untilDate:[NSDate distantFuture] inMode:NSEventTrackingRunLoopMode dequeue:YES];
-			if([event type] == NSEventTypeMouseMoved || [event type] == NSEventTypeLeftMouseDragged)
-				[self mouseMoved:event];
-		}
-
-		if(NSEqualRects(columnRect, [self columnRectForPoint:mouseHoveringAtPoint]))
-		{
-			GVLineRecord record = [self.delegate lineRecordForPosition:mouseDownAtPoint.y];
-			for(auto const& dataSource : [self visibleColumnDataSources])
-			{
-				NSRect columnRect = NSMakeRect(dataSource.x0, record.firstY, dataSource.width, record.lastY - record.firstY);
-				if(NSPointInRect(mouseDownAtPoint, columnRect))
-					[dataSource.delegate userDidClickColumnWithIdentifier:[NSString stringWithCxxString:dataSource.identifier] atLine:record.lineNumber];
-			}
-		}
-		else
-		{
-			mouseHoveringAtPoint = NSMakePoint(-1, -1);
-		}
-
-		mouseDownAtPoint = NSMakePoint(-1, -1);
-		[self setNeedsDisplayInRect:columnRect];
-	}
-	else
-	{
-		[_partnerView mouseDown:event];
-		while([event type] != NSEventTypeLeftMouseUp)
-		{
-			event = [NSApp nextEventMatchingMask:(NSEventMaskLeftMouseUp|NSEventMaskMouseMoved|NSEventMaskLeftMouseDragged|NSEventMaskMouseEntered|NSEventMaskMouseExited) untilDate:[NSDate distantFuture] inMode:NSEventTrackingRunLoopMode dequeue:YES];
-			if([event type] == NSEventTypeMouseMoved || [event type] == NSEventTypeLeftMouseDragged)
-				[_partnerView mouseDragged:event];
-		}
-		[_partnerView mouseUp:event];
-	}
-}
-
-- (void)columnDataSourceDidChange:(NSNotification*)notification
-{
-	[self reloadData:[notification object]];
-}
-
-- (void)setVisibility:(BOOL)visible forColumnWithIdentifier:(NSString*)columnIdentifier
-{
-	if(visible)
-			[hiddenColumns removeObject:columnIdentifier];
-	else	[hiddenColumns addObject:columnIdentifier];
-	[self updateSize];
+	OakPasteboardChooser* chooser = [OakPasteboardChooser sharedChooserForPasteboard:OakPasteboard.findPasteboard];
+	chooser.action          = @selector(findNext:);
+	chooser.alternateAction = @selector(orderFrontFindPanelForProject:);
+	[chooser showWindowRelativeToFrame:[self.window convertRectToScreen:[_textView convertRect:[_textView visibleRect] toView:nil]]];
 }
 
 // ==================
-// = Tracking rects =
+// = Symbol Chooser =
 // ==================
 
-- (void)clearTrackingRects
+- (void)selectAndCenter:(NSString*)aSelectionString
 {
-	for(NSTrackingArea* trackingArea in self.trackingAreas)
-		[self removeTrackingArea:trackingArea];
+	_textView.selectionString = aSelectionString;
+	[_textView centerSelectionInVisibleArea:self];
 }
 
-- (void)setupTrackingRects
+- (void)setSymbolChooser:(SymbolChooser*)aSymbolChooser
 {
-	[self clearTrackingRects];
-	[self addTrackingArea:[[NSTrackingArea alloc] initWithRect:[self visibleRect] options:NSTrackingMouseEnteredAndExited|NSTrackingMouseMoved|NSTrackingActiveInKeyWindow owner:self userInfo:nil]];
-}
+	if(_symbolChooser == aSymbolChooser)
+		return;
 
-- (void)scrollWheel:(NSEvent*)event
-{
-	[_partnerView scrollWheel:event];
-	[self mouseMoved:event];
-}
-
-- (void)mouseMoved:(NSEvent*)event
-{
-	NSRect beforeRect = [self columnRectForPoint:mouseHoveringAtPoint];
-	mouseHoveringAtPoint = [self convertPoint:[event locationInWindow] fromView:nil];
-	NSRect afterRect = [self columnRectForPoint:mouseHoveringAtPoint];
-
-	if(!NSEqualRects(beforeRect, afterRect))
+	if(_symbolChooser)
 	{
-		[self setNeedsDisplayInRect:beforeRect];
-		[self setNeedsDisplayInRect:afterRect];
+		[NSNotificationCenter.defaultCenter removeObserver:self name:NSWindowWillCloseNotification object:_symbolChooser.window];
+
+		_symbolChooser.target     = nil;
+		_symbolChooser.TMDocument = nil;
+	}
+
+	if(_symbolChooser = aSymbolChooser)
+	{
+		_symbolChooser.target          = self;
+		_symbolChooser.action          = @selector(symbolChooserDidSelectItems:);
+		_symbolChooser.filterString    = @"";
+		_symbolChooser.TMDocument      = self.document;
+		_symbolChooser.selectionString = _textView.selectionString;
+
+		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(symbolChooserWillClose:) name:NSWindowWillCloseNotification object:_symbolChooser.window];
 	}
 }
 
-- (void)mouseExited:(NSEvent*)event
+- (void)symbolChooserWillClose:(NSNotification*)aNotification
 {
-	NSRect columnRect = [self columnRectForPoint:mouseHoveringAtPoint];
-	mouseHoveringAtPoint = NSMakePoint(-1, -1);
-	[self setNeedsDisplayInRect:columnRect];
+	self.symbolChooser = nil;
 }
 
-- (void)cursorDidHide:(NSNotification*)aNotification
+- (IBAction)showSymbolChooser:(id)sender
 {
-	[self mouseExited:[[self window] currentEvent]];
+	self.symbolChooser = SymbolChooser.sharedInstance;
+	[self.symbolChooser showWindowRelativeToFrame:[self.window convertRectToScreen:[_textView convertRect:[_textView visibleRect] toView:nil]]];
+}
+
+- (void)symbolChooserDidSelectItems:(id)sender
+{
+	for(id item in [sender selectedItems])
+		[self selectAndCenter:[item selectionString]];
+}
+
+// =======================
+// = Status bar delegate =
+// =======================
+
+- (void)takeGrammarUUIDFrom:(id)sender
+{
+	if(bundles::item_ptr item = bundles::lookup(to_s([sender representedObject])))
+		[_textView performBundleItem:item];
+}
+
+- (void)goToSymbol:(id)sender
+{
+	[self selectAndCenter:[sender representedObject]];
+}
+
+- (void)showSymbolSelector:(NSPopUpButton*)symbolPopUp
+{
+	NSMenu* symbolMenu = symbolPopUp.menu;
+	[symbolMenu removeAllItems];
+
+	text::selection_t sel(to_s(_textView.selectionString));
+	text::pos_t caret = sel.last().max();
+
+	__block NSInteger index = 0;
+	[self.document enumerateSymbolsUsingBlock:^(text::pos_t const& pos, NSString* symbol){
+		if([symbol isEqualToString:@"-"])
+		{
+			[symbolMenu addItem:[NSMenuItem separatorItem]];
+		}
+		else
+		{
+			NSUInteger indent = 0;
+			while(indent < symbol.length && [symbol characterAtIndex:indent] == 0x2003) // Em-space
+				++indent;
+
+			NSMenuItem* item = [symbolMenu addItemWithTitle:[symbol substringFromIndex:indent] action:@selector(goToSymbol:) keyEquivalent:@""];
+			[item setIndentationLevel:indent];
+			[item setTarget:self];
+			[item setRepresentedObject:to_ns(pos)];
+		}
+
+		if(pos <= caret)
+			++index;
+	}];
+
+	if(symbolMenu.numberOfItems == 0)
+		[symbolMenu addItemWithTitle:@"No symbols to show for current document." action:@selector(nop:) keyEquivalent:@""];
+
+	[symbolPopUp selectItemAtIndex:(index ? index-1 : 0)];
+}
+
+- (void)showBundlesMenu:(id)sender
+{
+	if(!self.statusBar)
+		return NSBeep();
+
+	[NSApp sendAction:_cmd to:self.statusBar from:self];
+}
+
+- (void)showBundleItemSelector:(NSPopUpButton*)bundleItemsPopUp
+{
+	NSMenu* bundleItemsMenu = bundleItemsPopUp.menu;
+	[bundleItemsMenu removeAllItems];
+
+	std::multimap<std::string, bundles::item_ptr, text::less_t> ordered;
+	for(auto item : bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, bundles::kItemTypeBundle))
+		ordered.emplace(item->name(), item);
+
+	NSMenuItem* selectedItem = nil;
+	for(auto pair : ordered)
+	{
+		bool selectedGrammar = false;
+		for(auto item : bundles::query(bundles::kFieldGrammarScope, to_s(self.document.fileType), scope::wildcard, bundles::kItemTypeGrammar, pair.second->uuid(), true, true))
+			selectedGrammar = true;
+		if(!selectedGrammar && pair.second->hidden_from_user() || pair.second->menu().empty())
+			continue;
+
+		NSMenuItem* menuItem = [bundleItemsMenu addItemWithTitle:[NSString stringWithCxxString:pair.first] action:NULL keyEquivalent:@""];
+		menuItem.submenu = [[NSMenu alloc] initWithTitle:[NSString stringWithCxxString:pair.second->uuid()]];
+		menuItem.submenu.delegate = BundleMenuDelegate.sharedInstance;
+
+		if(selectedGrammar)
+		{
+			[menuItem setState:NSControlStateValueOn];
+			selectedItem = menuItem;
+		}
+	}
+
+	if(ordered.empty())
+		[bundleItemsMenu addItemWithTitle:@"No Bundles Loaded" action:@selector(nop:) keyEquivalent:@""];
+
+	if(selectedItem)
+		[bundleItemsPopUp selectItem:selectedItem];
+}
+
+- (NSUInteger)tabSize
+{
+	return _textView.tabSize;
+}
+
+- (void)setTabSize:(NSUInteger)newTabSize
+{
+	_textView.tabSize = newTabSize;
+	settings_t::set(kSettingsTabSizeKey, (size_t)newTabSize, to_s(self.document.fileType));
+}
+
+- (IBAction)takeTabSizeFrom:(id)sender
+{
+	ASSERT([sender respondsToSelector:@selector(tag)]);
+	if([sender tag] > 0)
+		self.tabSize = [sender tag];
+}
+
+- (IBAction)setIndentWithSpaces:(id)sender
+{
+	_textView.softTabs = YES;
+	settings_t::set(kSettingsSoftTabsKey, true, to_s(self.document.fileType));
+}
+
+- (IBAction)setIndentWithTabs:(id)sender
+{
+	_textView.softTabs = NO;
+	settings_t::set(kSettingsSoftTabsKey, false, to_s(self.document.fileType));
+}
+
+- (IBAction)showTabSizeSelectorPanel:(id)sender
+{
+	if(!tabSizeSelectorPanel)
+		[[NSBundle bundleForClass:[self class]] loadNibNamed:@"TabSizeSetting" owner:self topLevelObjects:NULL];
+	[tabSizeSelectorPanel makeKeyAndOrderFront:self];
+}
+
+- (void)toggleMacroRecording:(id)sender    { [_textView toggleMacroRecording:sender]; }
+
+// =============================
+// = GutterView Delegate Proxy =
+// =============================
+
+- (GVLineRecord)lineRecordForPosition:(CGFloat)yPos                              { return [_textView lineRecordForPosition:yPos];               }
+- (GVLineRecord)lineFragmentForLine:(NSUInteger)aLine column:(NSUInteger)aColumn { return [_textView lineFragmentForLine:aLine column:aColumn]; }
+
+// =========================
+// = GutterView DataSource =
+// =========================
+
+- (CGFloat)widthForColumnWithIdentifier:(id)columnIdentifier
+{
+	return floor((self.lineHeight-1) / 2) * 2 + 1;
+}
+
+- (NSImage*)imageForLine:(NSUInteger)lineNumber inColumnWithIdentifier:(id)columnIdentifier state:(GutterViewRowState)rowState
+{
+	if([columnIdentifier isEqualToString:kBookmarksColumnIdentifier])
+	{
+		__block std::map<size_t, NSString*> gutterImageName;
+
+		[self.document enumerateBookmarksAtLine:lineNumber block:^(text::pos_t const& pos, NSString* type, NSString* payload){
+			if(payload.length != 0)
+				gutterImageName.emplace(0, type);
+			else if([type isEqualToString:OakDocumentBookmarkIdentifier])
+				gutterImageName.emplace(1, rowState != GutterViewRowStateRegular ? @"Bookmark Hover Remove Template" : @"Bookmark Template");
+			else if(rowState == GutterViewRowStateRegular)
+				gutterImageName.emplace(2, type);
+		}];
+
+		if(rowState != GutterViewRowStateRegular)
+			gutterImageName.emplace(3, @"Bookmark Hover Add Template");
+
+		if(!gutterImageName.empty())
+			return [self gutterImage:gutterImageName.begin()->second];
+	}
+	else if([columnIdentifier isEqualToString:kFoldingsColumnIdentifier])
+	{
+		switch([_textView foldingStateForLine:lineNumber])
+		{
+			case kFoldingTop:       return [self gutterImage:rowState == GutterViewRowStateRegular ? @"Folding Top Template"       : @"Folding Top Hover Template"];
+			case kFoldingCollapsed: return [self gutterImage:rowState == GutterViewRowStateRegular ? @"Folding Collapsed Template" : @"Folding Collapsed Hover Template"];
+			case kFoldingBottom:    return [self gutterImage:rowState == GutterViewRowStateRegular ? @"Folding Bottom Template"    : @"Folding Bottom Hover Template"];
+		}
+	}
+	return nil;
+}
+
+// =============================
+// = Bookmark Submenu Delegate =
+// =============================
+
+- (void)takeBookmarkFrom:(id)sender
+{
+	if([sender respondsToSelector:@selector(representedObject)])
+		[self selectAndCenter:[sender representedObject]];
+}
+
+- (void)updateBookmarksMenu:(NSMenu*)aMenu
+{
+	[self.document enumerateBookmarksUsingBlock:^(text::pos_t const& pos, NSString* excerpt){
+		NSString* prefix = to_ns(text::pad(pos.line+1, 4) + ": ");
+		NSMenuItem* item = [aMenu addItemWithTitle:[prefix stringByAppendingString:excerpt] action:@selector(takeBookmarkFrom:) keyEquivalent:@""];
+		[item setRepresentedObject:to_ns(pos)];
+	}];
+
+	BOOL hasBookmarks = aMenu.numberOfItems;
+	if(hasBookmarks)
+		[aMenu addItem:[NSMenuItem separatorItem]];
+	[aMenu addItemWithTitle:@"Clear Bookmarks" action:hasBookmarks ? @selector(clearAllBookmarks:) : @selector(nop:) keyEquivalent:@""];
+}
+
+// =======================
+// = GutterView Delegate =
+// =======================
+
+- (void)userDidClickColumnWithIdentifier:(id)columnIdentifier atLine:(NSUInteger)lineNumber
+{
+	if([columnIdentifier isEqualToString:kBookmarksColumnIdentifier])
+	{
+		__block std::vector<text::pos_t> bookmarks;
+		__block NSMutableArray* content = [NSMutableArray array];
+
+		[self.document enumerateBookmarksAtLine:lineNumber block:^(text::pos_t const& pos, NSString* type, NSString* payload){
+			if(payload.length != 0)
+				[content addObject:payload];
+			else if([type isEqualToString:OakDocumentBookmarkIdentifier])
+				bookmarks.push_back(pos);
+		}];
+
+		if(content.count == 0)
+		{
+			if(bookmarks.empty())
+					[self.document setMarkOfType:OakDocumentBookmarkIdentifier atPosition:text::pos_t(lineNumber, 0) content:nil];
+			else	[self.document removeMarkOfType:OakDocumentBookmarkIdentifier atPosition:bookmarks.front()];
+		}
+		else
+		{
+			NSView* popoverContainerView = [[NSView alloc] initWithFrame:NSZeroRect];
+
+			NSTextField* textField = OakCreateLabel([content componentsJoinedByString:@"\n"]);
+			OakAddAutoLayoutViewsToSuperview(@[ textField ], popoverContainerView);
+
+			NSDictionary* views = NSDictionaryOfVariableBindings(textField);
+			[popoverContainerView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-(5)-[textField]-(5)-|" options:0 metrics:0 views:views]];
+			[popoverContainerView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-(10)-[textField]-(10)-|" options:0 metrics:0 views:views]];
+
+			NSViewController* viewController = [NSViewController new];
+			viewController.view = popoverContainerView;
+
+			NSPopover* popover = [NSPopover new];
+			popover.behavior = NSPopoverBehaviorTransient;
+			popover.contentViewController = viewController;
+
+			GVLineRecord record = [self lineFragmentForLine:lineNumber column:0];
+			NSRect rect = NSMakeRect(0, record.firstY, [self widthForColumnWithIdentifier:columnIdentifier], record.lastY - record.firstY);
+			[popover showRelativeToRect:rect ofView:gutterView preferredEdge:NSMaxXEdge];
+		}
+	}
+	else if([columnIdentifier isEqualToString:kFoldingsColumnIdentifier])
+	{
+		[_textView toggleFoldingAtLine:lineNumber recursive:OakIsAlternateKeyOrMouseEvent()];
+		[NSNotificationCenter.defaultCenter postNotificationName:GVColumnDataSourceDidChange object:self];
+	}
+}
+
+- (void)clearAllBookmarks:(id)sender
+{
+	[self.document removeAllMarksOfType:OakDocumentBookmarkIdentifier];
+}
+
+- (void)documentMarksDidChange:(NSNotification*)aNotification
+{
+	[NSNotificationCenter.defaultCenter postNotificationName:GVColumnDataSourceDidChange object:self];
+}
+
+// ============
+// = Printing =
+// ============
+
+- (void)printDocument:(id)sender
+{
+	[self.document runPrintOperationModalForWindow:self.window fontName:_textView.font.fontName];
 }
 @end
