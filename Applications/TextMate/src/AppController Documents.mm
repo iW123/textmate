@@ -206,19 +206,19 @@
 {
 	BOOL disableUntitledAtReactivationPrefs = [NSUserDefaults.standardUserDefaults boolForKey:kUserDefaultsDisableNewDocumentAtReactivationKey];
 	BOOL showFavoritesInsteadPrefs          = [NSUserDefaults.standardUserDefaults boolForKey:kUserDefaultsShowFavoritesInsteadOfUntitledKey];
+    
     // 👉 核心：没有窗口时处理 Dock 点击
     if (!flag) {
-        if (showFavoritesInsteadPrefs) {
-            // 打开首页 / 收藏页窗口（你自己的 window）
-            [self showFavoritesWindow];
-        }
-        else if (!disableUntitledAtReactivationPrefs) {
-            // 👉 关键：新建文档
-            [[NSDocumentController sharedDocumentController] newDocument:nil];
+        if (showFavoritesInsteadPrefs) {  // 打开首页 / 收藏页窗口（你自己的 window）
+            [self openFavorites:self];
+        } else if (!disableUntitledAtReactivationPrefs) {
+            [self newDocument:self]  // 👉 关键：新建文档
+        } else {
+            [self newDocument:self]  // 👉 保底：避免点击 Dock 没反应
         }
     }
 
-    return YES;
+    return NO;  // ⭐ 关键：交给你完全控制 reopen 行为
 //	return flag || !disableUntitledAtReactivationPrefs || showFavoritesInsteadPrefs;
 }
 
