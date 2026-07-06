@@ -355,7 +355,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		auto const& styles = theme->gutter_styles();
 
 		gutterView.foregroundColor           = [NSColor colorWithCGColor:styles.foreground];
-		gutterView.backgroundColor           = [NSColor colorWithCGColor:styles.background];
+        gutterView.backgroundColor           = [NSColor redColor];
 		gutterView.iconColor                 = [NSColor colorWithCGColor:styles.icons];
 		gutterView.iconHoverColor            = [NSColor colorWithCGColor:styles.iconsHover];
 		gutterView.iconPressedColor          = [NSColor colorWithCGColor:styles.iconsPressed];
