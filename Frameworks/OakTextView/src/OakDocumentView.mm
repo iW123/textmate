@@ -330,7 +330,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 {
 	if(theme_ptr theme = _textView.theme)
 	{
-		[textScrollView setBackgroundColor:[NSColor colorWithCGColor:theme->background(to_s(self.document.fileType))]];
+		[textScrollView setBackgroundColor: NSColor.greenColor];
 		[textScrollView setScrollerKnobStyle:theme->is_dark() ? NSScrollerKnobStyleLight : NSScrollerKnobStyleDark];
 
 		if(@available(macOS 10.14, *))
@@ -354,8 +354,8 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		[self updateGutterViewFont:self]; // trigger update of gutter view’s line number font
 		auto const& styles = theme->gutter_styles();
 
-		gutterView.foregroundColor           = [NSColor colorWithCGColor:styles.foreground];
-        gutterView.backgroundColor           = [NSColor redColor];
+        gutterView.foregroundColor = [NSColor whiteColor];
+        gutterView.backgroundColor = [NSColor redColor];
 		gutterView.iconColor                 = [NSColor colorWithCGColor:styles.icons];
 		gutterView.iconHoverColor            = [NSColor colorWithCGColor:styles.iconsHover];
 		gutterView.iconPressedColor          = [NSColor colorWithCGColor:styles.iconsPressed];
@@ -365,7 +365,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		gutterView.selectionIconHoverColor   = [NSColor colorWithCGColor:styles.selectionIconsHover];
 		gutterView.selectionIconPressedColor = [NSColor colorWithCGColor:styles.selectionIconsPressed];
 		gutterView.selectionBorderColor      = [NSColor colorWithCGColor:styles.selectionBorder];
-		gutterScrollView.backgroundColor     = [NSColor redColor];
+		gutterScrollView.backgroundColor     = gutterView.backgroundColor;
 		gutterDividerView.activeBackgroundColor = [NSColor colorWithCGColor:styles.divider];
 
 		[gutterView setNeedsDisplay:YES];
