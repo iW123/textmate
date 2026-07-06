@@ -354,8 +354,8 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		[self updateGutterViewFont:self]; // trigger update of gutter view’s line number font
 		auto const& styles = theme->gutter_styles();
 
-		gutterView.foregroundColor           = NSColor.clearColor;
-		gutterView.backgroundColor           = NSColor.clearColor;
+		gutterView.foregroundColor           = [NSColor colorWithCGColor:styles.foreground];
+		gutterView.backgroundColor           = [NSColor colorWithCGColor:styles.background];
 		gutterView.iconColor                 = [NSColor colorWithCGColor:styles.icons];
 		gutterView.iconHoverColor            = [NSColor colorWithCGColor:styles.iconsHover];
 		gutterView.iconPressedColor          = [NSColor colorWithCGColor:styles.iconsPressed];
@@ -365,9 +365,10 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		gutterView.selectionIconHoverColor   = [NSColor colorWithCGColor:styles.selectionIconsHover];
 		gutterView.selectionIconPressedColor = [NSColor colorWithCGColor:styles.selectionIconsPressed];
 		gutterView.selectionBorderColor      = [NSColor colorWithCGColor:styles.selectionBorder];
-		gutterScrollView.backgroundColor     = NSColor.clearColor;
+		gutterScrollView.backgroundColor     = gutterView.backgroundColor;
 		gutterDividerView.activeBackgroundColor = [NSColor colorWithCGColor:styles.divider];
 
+        gutterView.layer.backgroundColor = NSColor.redColor;
 		[gutterView setNeedsDisplay:YES];
 	}
 }
