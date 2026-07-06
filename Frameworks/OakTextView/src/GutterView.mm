@@ -330,7 +330,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 {
 	if(theme_ptr theme = _textView.theme)
 	{
-		[textScrollView setBackgroundColor:[NSColor greenColor]];
+		[textScrollView setBackgroundColor: NSColor.greenColor];
 		[textScrollView setScrollerKnobStyle:theme->is_dark() ? NSScrollerKnobStyleLight : NSScrollerKnobStyleDark];
 
 		if(@available(macOS 10.14, *))
