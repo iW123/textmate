@@ -330,7 +330,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 {
 	if(theme_ptr theme = _textView.theme)
 	{
-		[textScrollView setBackgroundColor:NSColor.greenColor];
+		[textScrollView setBackgroundColor:[NSColor greenColor]];
 		[textScrollView setScrollerKnobStyle:theme->is_dark() ? NSScrollerKnobStyleLight : NSScrollerKnobStyleDark];
 
 		if(@available(macOS 10.14, *))
@@ -354,8 +354,8 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		[self updateGutterViewFont:self]; // trigger update of gutter view’s line number font
 		auto const& styles = theme->gutter_styles();
 
-        gutterView.foregroundColor = NSColor.whiteColor;
-        gutterView.backgroundColor = NSColor.redColor;
+        gutterView.foregroundColor = [NSColor whiteColor];
+        gutterView.backgroundColor = [NSColor redColor];
 		gutterView.iconColor                 = [NSColor colorWithCGColor:styles.icons];
 		gutterView.iconHoverColor            = [NSColor colorWithCGColor:styles.iconsHover];
 		gutterView.iconPressedColor          = [NSColor colorWithCGColor:styles.iconsPressed];
