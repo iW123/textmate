@@ -314,6 +314,9 @@ static void DrawText (std::string const& text, CGRect const& rect, CGFloat basel
 	[self setupSelectionRects];
 
 	[self.selectionBackgroundColor set];
+    // 适配新 macOS 的王道写法
+    self.wantsLayer = YES;
+    self.layer.backgroundColor = [NSColor redColor].CGColor;
 	for(auto const& rect : backgroundRects)
 		NSRectFillUsingOperation(NSIntersectionRect(rect, NSIntersectionRect(aRect, self.frame)), NSCompositingOperationSourceOver);
 
