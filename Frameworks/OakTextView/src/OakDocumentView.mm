@@ -76,8 +76,6 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		[gutterView setTranslatesAutoresizingMaskIntoConstraints:NO];
 
 		gutterScrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
-        NSLog(@"gutter=%@", gutterView);
-        NSLog(@"wantsLayer=%d", gutterView.wantsLayer);
 		gutterScrollView.accessibilityElement = NO;
 		gutterScrollView.borderType   = NSNoBorder;
 		gutterScrollView.documentView = gutterView;
@@ -87,8 +85,6 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		[gutterScrollView.contentView addConstraint:[NSLayoutConstraint constraintWithItem:gutterView attribute:NSLayoutAttributeRight relatedBy:NSLayoutRelationEqual toItem:gutterScrollView.contentView attribute:NSLayoutAttributeRight multiplier:1.0 constant:0.0]];
 
 		gutterDividerView = OakCreateVerticalLine(OakBackgroundFillViewStyleNone);
-        gutterView.wantsLayer = YES;
-        gutterView.layer.backgroundColor = NSColor.redColor.CGColor;
 
 		_statusBar = [[OTVStatusBar alloc] initWithFrame:NSZeroRect];
 		_statusBar.delegate = self;
@@ -332,7 +328,6 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 
 - (void)updateStyle
 {
-    NSLog(@"updateStyle");
 	if(theme_ptr theme = _textView.theme)
 	{
 		[textScrollView setBackgroundColor:[NSColor colorWithCGColor:theme->background(to_s(self.document.fileType))]];
@@ -373,9 +368,18 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		gutterScrollView.backgroundColor     = gutterView.backgroundColor;
 		gutterDividerView.activeBackgroundColor = [NSColor colorWithCGColor:styles.divider];
 
-        gutterView.layer.backgroundColor = [[NSColor redColor] CGColor];
 		[gutterView setNeedsDisplay:YES];
 	}
+    
+    for (NSView *v in gutterScrollView.contentView.subviews) {
+        NSLog(@"Subview: %@ frame=%@ hidden=%d",
+              NSStringFromClass(v.class),
+              NSStringFromRect(v.frame),
+              v.hidden);
+    }
+    NSLog(@"gutter frame=%@", NSStringFromRect(gutterView.frame));
+    NSLog(@"gutter bounds=%@", NSStringFromRect(gutterView.bounds));
+    NSLog(@"clip bounds=%@", NSStringFromRect(gutterScrollView.contentView.bounds));
 }
 
 - (IBAction)toggleLineNumbers:(id)sender
