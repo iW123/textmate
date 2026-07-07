@@ -71,7 +71,7 @@
 
 		_outlineView.backgroundColor = NSColor.clearColor;
         _scrollView.drawsBackground  = YES;
-        _scrollView.backgroundColor  = [NSColor lightGrayColor];
+        _scrollView.backgroundColor  = [NSColor textBackgroundColor];
 	}
 	return self;
 }
