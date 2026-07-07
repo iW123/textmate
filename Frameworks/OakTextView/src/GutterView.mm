@@ -293,24 +293,24 @@ static CGFloat WidthOfLineNumbers (NSUInteger lineNumber, NSFont* font)
 
 static void DrawText (std::string const& text, CGRect const& rect, CGFloat baseline, NSFont* font, NSColor* color)
 {
-	CGContextRef context = NSGraphicsContext.currentContext.CGContext;
-	CGContextSaveGState(context);
+    CGContextRef context = NSGraphicsContext.currentContext.CGContext;
+    CGContextSaveGState(context);
 
-	CTLineRef line = CreateCTLineFromText(text, font, color);
-	CGContextSetTextMatrix(context, CGAffineTransformIdentity);
-//	CGContextConcatCTM(context, CGAffineTransformMake(1, 0, 0, -1, 0, 2 * baseline));
+    CTLineRef line = CreateCTLineFromText(text, font, color);
+
+    CGContextSetTextMatrix(context, CGAffineTransformIdentity);
+
+    CGContextConcatCTM(context,
+        CGAffineTransformMake(1, 0, 0, -1, 0, 2 * baseline));
+
     CGContextSetTextPosition(context,
-        CGRectGetMinX(rect),
+        CGRectGetMaxX(rect) - CTLineGetTypographicBounds(line, NULL, NULL, NULL),
         baseline);
-	CGContextSetTextPosition(context, CGRectGetMaxX(rect) - CTLineGetTypographicBounds(line, NULL, NULL, NULL), baseline);
-    NSLog(@"draw text=%s x=%f y=%f",
-          text.c_str(),
-          CGRectGetMaxX(rect),
-          baseline);
-	CTLineDraw(line, context);
-	CFRelease(line);
 
-	CGContextRestoreGState(context);
+    CTLineDraw(line, context);
+
+    CFRelease(line);
+    CGContextRestoreGState(context);
 }
 
 - (void)drawRect:(NSRect)aRect
