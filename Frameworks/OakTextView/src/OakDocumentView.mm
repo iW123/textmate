@@ -365,7 +365,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		gutterView.selectionIconHoverColor   = [NSColor colorWithCGColor:styles.selectionIconsHover];
 		gutterView.selectionIconPressedColor = [NSColor colorWithCGColor:styles.selectionIconsPressed];
 		gutterView.selectionBorderColor      = [NSColor colorWithCGColor:styles.selectionBorder];
-		gutterScrollView.backgroundColor     = gutterView.backgroundColor;
+        gutterScrollView.backgroundColor     = [NSColor colorWithWhite:1 alpha:1];  // gutterView.backgroundColor;
 		gutterDividerView.activeBackgroundColor = [NSColor separatorColor];
 
 		[gutterView setNeedsDisplay:YES];
