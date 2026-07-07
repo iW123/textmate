@@ -417,6 +417,7 @@ static void DrawText (std::string const& text, CGRect const& rect, CGFloat basel
 	NSPoint origin = NSMakePoint(0, NSMinY(_partnerView.enclosingScrollView.contentView.bounds));
 	CGFloat height = std::max(NSHeight(_partnerView.frame), origin.y + NSHeight([self visibleRect]));
 	[self setSize:NSMakeSize(totalWidth, height)];
+    NSLog(@"WStotalWidth=%f", totalWidth);
 }
 
 - (NSSize)intrinsicContentSize
