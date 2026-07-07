@@ -72,7 +72,6 @@ struct data_source_t
 
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(cursorDidHide:) name:OakCursorDidHideNotification object:nil];
 		OakObserveUserDefaults(self);
-        NSLog(@"CREATE %@", self);
 	}
 	return self;
 }
@@ -310,8 +309,8 @@ static void DrawText (std::string const& text, CGRect const& rect, CGFloat basel
 - (void)drawRect:(NSRect)aRect
 {
     [[NSColor redColor] setFill];
-    NSRectFill(self.bounds);
-    NSLog(@"DRAW %@", self);
+
+        NSRectFill(self.bounds);
 }
 
 - (void)updateSize
