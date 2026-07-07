@@ -308,15 +308,13 @@ static void DrawText (std::string const& text, CGRect const& rect, CGFloat basel
 
 - (void)drawRect:(NSRect)aRect
 {
+    NSLog(@"WSdrawRect: %@", NSStringFromRect(aRect));
 	[self.backgroundColor set];
 	NSRectFill(NSIntersectionRect(aRect, self.frame));
 
 	[self setupSelectionRects];
 
 	[self.selectionBackgroundColor set];
-    // 适配新 macOS 的王道写法
-    self.wantsLayer = YES;
-    self.layer.backgroundColor = [NSColor redColor].CGColor;
 	for(auto const& rect : backgroundRects)
 		NSRectFillUsingOperation(NSIntersectionRect(rect, NSIntersectionRect(aRect, self.frame)), NSCompositingOperationSourceOver);
 
@@ -345,7 +343,7 @@ static void DrawText (std::string const& text, CGRect const& rect, CGFloat basel
 			if(dataSource.identifier == GVLineNumbersColumnIdentifier.UTF8String)
 			{
 				NSColor* textColor = selectedRow ? self.selectionForegroundColor : self.foregroundColor;
-				DrawText(record.softlineOffset == 0 ? std::to_string(record.lineNumber + 1) : "·", columnRect, NSMinY(columnRect) + record.baseline, self.lineNumberFont, [NSColor systemRedColor]);
+				DrawText(record.softlineOffset == 0 ? std::to_string(record.lineNumber + 1) : "·", columnRect, NSMinY(columnRect) + record.baseline, self.lineNumberFont, textColor);
 			}
 			else if(record.softlineOffset == 0)
 			{
