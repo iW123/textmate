@@ -70,7 +70,8 @@
 		_scrollView.contentInsets = insets;
 
 		_outlineView.backgroundColor = NSColor.clearColor;
-		_scrollView.drawsBackground  = NO;
+        _scrollView.drawsBackground  = YES;
+        _scrollView.backgroundColor  = [NSColor colorWithRed:0.12 green:0.12 blue:0.12 alpha:1.0];
 	}
 	return self;
 }
