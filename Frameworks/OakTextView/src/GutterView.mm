@@ -347,7 +347,10 @@ static void DrawText (std::string const& text, CGRect const& rect, CGFloat basel
 			NSRect columnRect = NSMakeRect(dataSource.x0, record.firstY, dataSource.width, record.lastY - record.firstY);
 			if(dataSource.identifier == GVLineNumbersColumnIdentifier.UTF8String)
 			{
-				NSColor* textColor = selectedRow ? self.selectionForegroundColor : self.foregroundColor;
+				NSColor* textColor = [NSColor redColor];
+                NSLog(@"draw line number=%lu color=%@",
+                      (unsigned long)record.lineNumber + 1,
+                      textColor);
 				DrawText(record.softlineOffset == 0 ? std::to_string(record.lineNumber + 1) : "·", columnRect, NSMinY(columnRect) + record.baseline, self.lineNumberFont, textColor);
 			}
 			else if(record.softlineOffset == 0)
