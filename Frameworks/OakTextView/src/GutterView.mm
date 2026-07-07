@@ -298,8 +298,15 @@ static void DrawText (std::string const& text, CGRect const& rect, CGFloat basel
 
 	CTLineRef line = CreateCTLineFromText(text, font, color);
 	CGContextSetTextMatrix(context, CGAffineTransformIdentity);
-	CGContextConcatCTM(context, CGAffineTransformMake(1, 0, 0, -1, 0, 2 * baseline));
+//	CGContextConcatCTM(context, CGAffineTransformMake(1, 0, 0, -1, 0, 2 * baseline));
+    CGContextSetTextPosition(context,
+        CGRectGetMinX(rect),
+        baseline);
 	CGContextSetTextPosition(context, CGRectGetMaxX(rect) - CTLineGetTypographicBounds(line, NULL, NULL, NULL), baseline);
+    NSLog(@"draw text=%s x=%f y=%f",
+          text.c_str(),
+          CGRectGetMaxX(rect),
+          baseline);
 	CTLineDraw(line, context);
 	CFRelease(line);
 
