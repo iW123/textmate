@@ -307,7 +307,13 @@ static void DrawText (std::string const& text, CGRect const& rect, CGFloat basel
         CGRectGetMaxX(rect) - CTLineGetTypographicBounds(line, NULL, NULL, NULL),
         baseline);
 
-    CTLineDraw(line, context);
+    NSDictionary *attrs = @{
+        NSFontAttributeName: font,
+        NSForegroundColorAttributeName: [NSColor redColor]
+    };
+
+    [text.c_str() drawAtPoint:NSMakePoint(20, 10)
+               withAttributes:attrs];
 
     CFRelease(line);
     CGContextRestoreGState(context);
