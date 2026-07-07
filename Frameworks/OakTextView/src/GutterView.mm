@@ -312,8 +312,10 @@ static void DrawText (std::string const& text, CGRect const& rect, CGFloat basel
         NSForegroundColorAttributeName: [NSColor redColor]
     };
 
-    [text.c_str() drawAtPoint:NSMakePoint(20, 10)
-               withAttributes:attrs];
+    NSString *str = [NSString stringWithUTF8String:text.c_str()];
+
+    [str drawAtPoint:NSMakePoint(20, 10)
+      withAttributes:attrs];
 
     CFRelease(line);
     CGContextRestoreGState(context);
