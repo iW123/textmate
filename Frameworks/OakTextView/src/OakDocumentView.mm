@@ -79,6 +79,10 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		gutterScrollView.accessibilityElement = NO;
 		gutterScrollView.borderType   = NSNoBorder;
 //		gutterScrollView.documentView = gutterView;
+        NSView *testView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 42, 800)];
+        testView.wantsLayer = YES;
+        testView.layer.backgroundColor = NSColor.redColor.CGColor;
+        gutterScrollView.documentView = testView;
 
 		[gutterScrollView.contentView addConstraint:[NSLayoutConstraint constraintWithItem:gutterView attribute:NSLayoutAttributeLeft relatedBy:NSLayoutRelationEqual toItem:gutterScrollView.contentView attribute:NSLayoutAttributeLeft multiplier:1.0 constant:0.0]];
 		[gutterScrollView.contentView addConstraint:[NSLayoutConstraint constraintWithItem:gutterView attribute:NSLayoutAttributeTop relatedBy:NSLayoutRelationEqual toItem:gutterScrollView.contentView attribute:NSLayoutAttributeTop multiplier:1.0 constant:0.0]];
