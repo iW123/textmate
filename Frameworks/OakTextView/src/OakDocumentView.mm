@@ -64,6 +64,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		textScrollView.hasHorizontalScroller    = YES;
 		textScrollView.autohidesScrollers       = YES;
 		textScrollView.borderType               = NSNoBorder;
+        textScrollView.scrollerStyle            = NSScrollerStyleOverlay;
 		textScrollView.documentView             = _textView;
 
 		gutterView = [[GutterView alloc] initWithFrame:NSZeroRect];
@@ -365,7 +366,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		gutterView.selectionIconHoverColor   = [NSColor colorWithCGColor:styles.selectionIconsHover];
 		gutterView.selectionIconPressedColor = [NSColor colorWithCGColor:styles.selectionIconsPressed];
 		gutterView.selectionBorderColor      = [NSColor colorWithCGColor:styles.selectionBorder];
-        gutterScrollView.backgroundColor     = [NSColor colorWithWhite:1 alpha:1];  // gutterView.backgroundColor;
+		gutterScrollView.backgroundColor     = gutterView.backgroundColor;
 		gutterDividerView.activeBackgroundColor = [NSColor separatorColor];
 
 		[gutterView setNeedsDisplay:YES];
