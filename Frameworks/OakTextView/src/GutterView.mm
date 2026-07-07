@@ -73,6 +73,11 @@ struct data_source_t
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(cursorDidHide:) name:OakCursorDidHideNotification object:nil];
 		OakObserveUserDefaults(self);
 	}
+    NSLog(@"wantsLayer before=%d layer=%@", self.wantsLayer, self.layer);
+
+    self.wantsLayer = YES;
+
+    NSLog(@"wantsLayer after=%d layer=%@", self.wantsLayer, self.layer);
 	return self;
 }
 
@@ -308,10 +313,7 @@ static void DrawText (std::string const& text, CGRect const& rect, CGFloat basel
 
 - (void)drawRect:(NSRect)aRect
 {
-    [[NSColor redColor] setFill];
-    NSRectFill(self.bounds);
-    return;
-//	[self.backgroundColor set];
+	[self.backgroundColor set];
 	NSRectFill(NSIntersectionRect(aRect, self.frame));
 
 	[self setupSelectionRects];
