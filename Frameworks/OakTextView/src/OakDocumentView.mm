@@ -63,7 +63,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		textScrollView.verticalScrollElasticity = NSScrollElasticityAllowed;
 		textScrollView.hasHorizontalScroller    = YES;
 		textScrollView.autohidesScrollers       = YES;
-		textScrollView.borderType               = NSNoBorder;
+		textScrollView.borderType               = NSBezelBorder;
         textScrollView.scrollerStyle            = NSScrollerStyleOverlay;
 		textScrollView.documentView             = _textView;
 
