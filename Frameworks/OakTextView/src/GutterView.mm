@@ -326,6 +326,11 @@ static void DrawText (std::string const& text, CGRect const& rect, CGFloat basel
 		CGContextSetShouldAntialias(NSGraphicsContext.currentContext.CGContext, false);
 
 	std::pair<NSUInteger, NSUInteger> prevLine(NSNotFound, 0);
+    GVLineRecord record = [self.delegate lineRecordForPosition:0];
+    NSLog(@"line=%lu firstY=%f lastY=%f",
+          (unsigned long)record.lineNumber,
+          record.firstY,
+          record.lastY);
 	for(CGFloat y = NSMinY(aRect); y < NSMaxY(aRect); )
 	{
 		GVLineRecord record = [self.delegate lineRecordForPosition:y];
@@ -418,6 +423,12 @@ static void DrawText (std::string const& text, CGRect const& rect, CGFloat basel
 	CGFloat height = std::max(NSHeight(_partnerView.frame), origin.y + NSHeight([self visibleRect]));
 	[self setSize:NSMakeSize(totalWidth, height)];
     NSLog(@"WStotalWidth=%f", totalWidth);
+    for (auto const& it : columnDataSources) {
+        NSLog(@"column=%s width=%f x=%f",
+              it.identifier.c_str(),
+              it.width,
+              it.x0);
+    }
 }
 
 - (NSSize)intrinsicContentSize
