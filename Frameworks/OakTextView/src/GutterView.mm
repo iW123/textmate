@@ -310,8 +310,8 @@ static void DrawText (std::string const& text, CGRect const& rect, CGFloat basel
 {
 //	[self.backgroundColor set];
 //	NSRectFill(NSIntersectionRect(aRect, self.frame));
-    [[NSColor lightGrayColor] set];
-    NSRectFill(NSIntersectionRect(aRect, self.bounds));
+    [[NSColor textBackgroundColor] set];
+    NSRectFill(NSIntersectionRect(aRect, self.frame));
 
 	[self setupSelectionRects];
 
