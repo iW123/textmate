@@ -308,9 +308,89 @@ static void DrawText (std::string const& text, CGRect const& rect, CGFloat basel
 
 - (void)drawRect:(NSRect)aRect
 {
-    [[NSColor redColor] setFill];
+	[self.backgroundColor set];
+	NSRectFill(NSIntersectionRect(aRect, self.frame));
 
-        NSRectFill(self.bounds);
+	[self setupSelectionRects];
+
+	[self.selectionBackgroundColor set];
+	for(auto const& rect : backgroundRects)
+		NSRectFillUsingOperation(NSIntersectionRect(rect, NSIntersectionRect(aRect, self.frame)), NSCompositingOperationSourceOver);
+
+	[self.selectionBorderColor set];
+	for(auto const& rect : borderRects)
+		NSRectFillUsingOperation(NSIntersectionRect(rect, NSIntersectionRect(aRect, self.frame)), NSCompositingOperationSourceOver);
+
+	if(!self.antiAlias)
+		CGContextSetShouldAntialias(NSGraphicsContext.currentContext.CGContext, false);
+
+	std::pair<NSUInteger, NSUInteger> prevLine(NSNotFound, 0);
+	for(CGFloat y = NSMinY(aRect); y < NSMaxY(aRect); )
+	{
+		GVLineRecord record = [self.delegate lineRecordForPosition:y];
+		if(record.lastY <= y || prevLine == std::make_pair(record.lineNumber, record.softlineOffset))
+			break;
+		prevLine = std::make_pair(record.lineNumber, record.softlineOffset);
+
+		BOOL selectedRow = NO;
+		for(auto const& rect : backgroundRects)
+			selectedRow = selectedRow || NSIntersectsRect(rect, NSMakeRect(0, record.firstY, CGRectGetWidth(self.frame), record.lastY - record.firstY));
+
+		for(auto const& dataSource : [self visibleColumnDataSources])
+		{
+			NSRect columnRect = NSMakeRect(dataSource.x0, record.firstY, dataSource.width, record.lastY - record.firstY);
+			if(dataSource.identifier == GVLineNumbersColumnIdentifier.UTF8String)
+			{
+				NSColor* textColor = selectedRow ? self.selectionForegroundColor : self.foregroundColor;
+				DrawText(record.softlineOffset == 0 ? std::to_string(record.lineNumber + 1) : "·", columnRect, NSMinY(columnRect) + record.baseline, self.lineNumberFont, textColor);
+			}
+			else if(record.softlineOffset == 0)
+			{
+				BOOL isHoveringRect = NSMouseInRect(mouseHoveringAtPoint, columnRect, [self isFlipped]);
+				BOOL isDownInRect   = NSMouseInRect(mouseDownAtPoint,     columnRect, [self isFlipped]);
+
+				if(selectedRow && isDownInRect)        [self.selectionIconPressedColor set];
+				else if(selectedRow && isHoveringRect) [self.selectionIconHoverColor   set];
+				else if(selectedRow)                   [self.selectionIconColor        set];
+				else if(isDownInRect)                  [self.iconPressedColor          set];
+				else if(isHoveringRect)                [self.iconHoverColor            set];
+				else                                   [self.iconColor                 set];
+
+				NSImage* image = [self imageForColumn:dataSource.identifier atLine:record.lineNumber hovering:isHoveringRect && NSEqualPoints(mouseDownAtPoint, NSMakePoint(-1, -1)) pressed:isHoveringRect && isDownInRect];
+				if([image size].height > 0 && [image size].width > 0)
+				{
+					// The placement of the center of image is aligned with the center of the capHeight.
+					CGFloat center = record.baseline - ([self.lineNumberFont capHeight] / 2);
+					CGFloat x = round((NSWidth(columnRect) - [image size].width) / 2);
+					CGFloat y = round(center - ([image size].height / 2));
+					NSRect imageRect = NSMakeRect(NSMinX(columnRect) + x, NSMinY(columnRect) + y, [image size].width, [image size].height);
+
+					if(image.isTemplate)
+					{
+						[NSGraphicsContext saveGraphicsState];
+
+						NSAffineTransform* transform = [NSAffineTransform transform];
+						[transform translateXBy:0 yBy:NSMaxY(imageRect)];
+						[transform scaleXBy:1 yBy:-1];
+						[transform concat];
+						imageRect.origin.y = 0;
+
+						CGImageRef cgImage = [image CGImageForProposedRect:&imageRect context:[NSGraphicsContext currentContext] hints:nil];
+						CGContextClipToMask(NSGraphicsContext.currentContext.CGContext, imageRect, cgImage);
+
+						NSRectFillUsingOperation(imageRect, NSCompositingOperationSourceOver);
+						[NSGraphicsContext restoreGraphicsState];
+					}
+					else
+					{
+						[image drawInRect:imageRect];
+					}
+				}
+			}
+		}
+
+		y = record.lastY;
+	}
 }
 
 - (void)updateSize
