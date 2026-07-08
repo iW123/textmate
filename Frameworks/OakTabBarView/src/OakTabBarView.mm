@@ -294,7 +294,7 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[topBorder(==1@75)][background]|" options:NSLayoutFormatAlignAllLeft|NSLayoutFormatAlignAllRight metrics:nil views:views]];
 		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[leftBorder]|" options:0 metrics:nil views:views]];
 
-		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-(3@53)-[close]-(>=3@53)-[title]-(>=6@53)-|" options:0 metrics:nil views:views]];
+		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-(8@53)-[close]-(>=3@53)-[title]-(>=6@53)-|" options:0 metrics:nil views:views]];
 
 		_overflowButtonConstraints = [NSLayoutConstraint constraintsWithVisualFormat:@"H:[title]-(>=3@53)-[overflow]" options:0 metrics:nil views:views];
 		[NSLayoutConstraint deactivateConstraints:_overflowButtonConstraints];
