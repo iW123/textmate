@@ -311,8 +311,10 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 		NSLayoutConstraint* centerTitleConstraint = [NSLayoutConstraint constraintWithItem:_textField attribute:NSLayoutAttributeCenterX relatedBy:NSLayoutRelationEqual toItem:self attribute:NSLayoutAttributeCenterX multiplier:1 constant:0];
 		centerTitleConstraint.priority = NSLayoutPriorityFittingSizeCompression+1;
 		[self addConstraint:centerTitleConstraint];
-        NSLayoutConstraint* centerYConstraint = [NSLayoutConstraint constraintWithItem:_textField attribute:NSLayoutAttributeCenterY relatedBy:NSLayoutRelationEqual toItem:self attribute:NSLayoutAttributeCenterY multiplier:1 constant:0];
-        [self addConstraint:centerYConstraint];
+        NSLayoutConstraint* centerTitleYConstraint = [NSLayoutConstraint constraintWithItem:_textField attribute:NSLayoutAttributeCenterY relatedBy:NSLayoutRelationEqual toItem:self attribute:NSLayoutAttributeCenterY multiplier:1 constant:0];
+        [self addConstraint:centerTitleYConstraint];
+        NSLayoutConstraint* centerCloseYConstraint = [NSLayoutConstraint constraintWithItem:_closeButton attribute:NSLayoutAttributeCenterY relatedBy:NSLayoutRelationEqual toItem:self attribute:NSLayoutAttributeCenterY multiplier:1 constant:0];
+        [self addConstraint:centerCloseYConstraint];
 
 		self.tabItem = tabItem;
 	}
