@@ -302,7 +302,7 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 
 		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:[overflow]|" options:0 metrics:nil views:views]];
 		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[close]-(4)-|" options:0 metrics:nil views:views]];
-		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[title]-(3)-|" options:0 metrics:nil views:views]];
+//		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[title]-(3)-|" options:0 metrics:nil views:views]];
 		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[overflow]|" options:0 metrics:nil views:views]];
 
 		[_textField setContentHuggingPriority:NSLayoutPriorityRequired forOrientation:NSLayoutConstraintOrientationHorizontal];
@@ -311,6 +311,8 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 		NSLayoutConstraint* centerTitleConstraint = [NSLayoutConstraint constraintWithItem:_textField attribute:NSLayoutAttributeCenterX relatedBy:NSLayoutRelationEqual toItem:self attribute:NSLayoutAttributeCenterX multiplier:1 constant:0];
 		centerTitleConstraint.priority = NSLayoutPriorityFittingSizeCompression+1;
 		[self addConstraint:centerTitleConstraint];
+        NSLayoutConstraint* centerYConstraint = [NSLayoutConstraint constraintWithItem:_textField attribute:NSLayoutAttributeCenterY relatedBy:NSLayoutRelationEqual toItem:self attribute:NSLayoutAttributeCenterY multiplier:1 constant:0];
+        [self addConstraint:centerYConstraint];
 
 		self.tabItem = tabItem;
 	}
