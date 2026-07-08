@@ -1352,7 +1352,7 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 	for(OakTabFrame* tabFrame in _currentLayout)
 	{
 		tabFrame.tabItem.tabView.tabItem = tabFrame.tabItem;
-		tabFrame.tabItem.tabView.frame = NSMakeRect(x, y, tabFrame.width, height);
+		tabFrame.tabItem.tabView.frame = NSMakeRect(x, y, tabFrame.width, 28);
 		x += tabFrame.width;
 	}
 
