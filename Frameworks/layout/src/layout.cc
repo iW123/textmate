@@ -610,12 +610,11 @@ namespace ng
 
 			OakRectSymmetricDifference(_pre_refresh_highlight_border,   postHighlightBorder,   back_inserter(_dirty_rects));
 			OakRectSymmetricDifference(_pre_refresh_highlight_interior, postHighlightInterior, back_inserter(_dirty_rects));
-
-            CGRect oldLine = full_width(rect_at_index(_pre_refresh_caret));
-            CGRect newLine = full_width(rect_at_index(selection.last().last.index));
-
-            _dirty_rects.push_back(oldLine);
-            _dirty_rects.push_back(newLine);
+            
+            auto oldRow = row_for_offset(_pre_refresh_caret);
+            auto newRow = row_for_offset(selection.last().last.index);
+            _dirty_rects.push_back(full_width(rect_for(oldRow)));
+            _dirty_rects.push_back(full_width(rect_for(newRow)));
             
 			_pre_refresh_carets.clear();
 			_pre_refresh_selections.clear();
@@ -831,17 +830,13 @@ namespace ng
 			foreach(row, firstY, _rows.lower_bound(yMax, &row_y_comp))
 				row->value.draw_background(_theme, *_metrics, context, isFlipped, visibleRect, background, _buffer, row->offset._length, CGPointMake(_margin.left, _margin.top + row->offset._height));
             
-            // 当前行背景
+            // WS 当前行背景
             if(!selection.empty())
             {
-                size_t line = _buffer.convert(selection.last().last.index).line;
                 auto row = row_for_offset(selection.last().last.index);
-                CGRect rect = rect_for(row);
-                render::fill_rect(
-                    context,
-                    CGColorCreateGenericRGB(0.5, 0.5, 0.5, 0.15),
-                    full_width(rect)
-                );
+                auto const& styles = _theme->styles_for_scope(scope);
+                if (CGColorRef color = styles.line_highlight())
+                    render::fill_rect(context, color, full_width(rect_for(row)));
             }
 		}
 
