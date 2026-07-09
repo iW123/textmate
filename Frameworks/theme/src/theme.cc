@@ -61,6 +61,7 @@ theme_t::decomposed_style_t theme_t::shared_styles_t::parse_styles (plist::dicti
 	get_key_path(plist, "settings.background",      res.background);
 	get_key_path(plist, "settings.caret",           res.caret);
 	get_key_path(plist, "settings.selection",       res.selection);
+    get_key_path(plist, "settings.lineHighlight", res.line_highlight);
 	get_key_path(plist, "settings.invisibles",      res.invisibles);
 
 	bool flag;
@@ -416,8 +417,10 @@ styles_t const& theme_t::styles_for_scope (scope::scope_t const& scope) const
 		CGColorPtr background = OakColorCreateFromThemeColor(base.background, _styles->_color_space) ?: CGColorPtr(CGColorCreate(_styles->_color_space, (CGFloat[4]){   1,   1,   1,   1 }), CGColorRelease);
 		CGColorPtr caret      = OakColorCreateFromThemeColor(base.caret,      _styles->_color_space) ?: CGColorPtr(CGColorCreate(_styles->_color_space, (CGFloat[4]){   0,   0,   0,   1 }), CGColorRelease);
 		CGColorPtr selection  = OakColorCreateFromThemeColor(base.selection,  _styles->_color_space) ?: CGColorPtr(CGColorCreate(_styles->_color_space, (CGFloat[4]){ 0.5, 0.5, 0.5,   1 }), CGColorRelease);
+        CGColorPtr lineHighlight =
+            OakColorCreateFromThemeColor(base.line_highlight, _styles->_color_space);
 
-		styles_t res(foreground, background, caret, selection, font, base.underlined == bool_true, base.strikethrough == bool_true, base.misspelled == bool_true);
+		styles_t res(foreground, background, caret, selection, lineHighlight, font, base.underlined == bool_true, base.strikethrough == bool_true, base.misspelled == bool_true);
 		styles = _cache.insert(std::make_pair(scope, res)).first;
 	}
 	return styles->second;
@@ -496,6 +499,7 @@ theme_t::decomposed_style_t& theme_t::decomposed_style_t::operator+= (theme_t::d
 	background = rhs.background.is_blank()    ? background : blend(background, rhs.background);
 	caret      = rhs.caret.is_blank()         ? caret      : rhs.caret;
 	selection  = rhs.selection.is_blank()     ? selection  : rhs.selection;
+    line_highlight = rhs.line_highlight.is_blank() ? line_highlight : rhs.line_highlight;
 	invisibles = rhs.invisibles.is_blank()    ? invisibles : rhs.invisibles;
 
 	bold          = rhs.bold          == bool_unset ? bold          : rhs.bold;
