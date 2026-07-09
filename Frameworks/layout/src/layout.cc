@@ -611,6 +611,12 @@ namespace ng
 			OakRectSymmetricDifference(_pre_refresh_highlight_border,   postHighlightBorder,   back_inserter(_dirty_rects));
 			OakRectSymmetricDifference(_pre_refresh_highlight_interior, postHighlightInterior, back_inserter(_dirty_rects));
 
+            CGRect oldLine = full_width(rect_at_index(_pre_refresh_caret));
+            CGRect newLine = full_width(rect_at_index(selection.last().last.index));
+
+            _dirty_rects.push_back(oldLine);
+            _dirty_rects.push_back(newLine);
+            
 			_pre_refresh_carets.clear();
 			_pre_refresh_selections.clear();
 			_pre_refresh_highlight_border.clear();
