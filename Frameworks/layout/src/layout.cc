@@ -824,6 +824,19 @@ namespace ng
 		{
 			foreach(row, firstY, _rows.lower_bound(yMax, &row_y_comp))
 				row->value.draw_background(_theme, *_metrics, context, isFlipped, visibleRect, background, _buffer, row->offset._length, CGPointMake(_margin.left, _margin.top + row->offset._height));
+            
+            // 当前行背景
+            if(!selection.empty())
+            {
+                size_t line = _buffer.convert(selection.last().last.index).line;
+                auto row = row_for_offset(selection.last().last.index);
+                CGRect rect = rect_for(row);
+                render::fill_rect(
+                    context,
+                    CGColorCreateGenericRGB(0.5, 0.5, 0.5, 0.15),
+                    full_width(rect)
+                );
+            }
 		}
 
 		base_colors_t const& baseColors = get_base_colors(_theme->is_dark());
