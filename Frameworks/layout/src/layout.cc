@@ -829,16 +829,20 @@ namespace ng
 		{
 			foreach(row, firstY, _rows.lower_bound(yMax, &row_y_comp))
 				row->value.draw_background(_theme, *_metrics, context, isFlipped, visibleRect, background, _buffer, row->offset._length, CGPointMake(_margin.left, _margin.top + row->offset._height));
-            
-            // WS 当前行背景
-            if(!selection.empty())
-            {
-                auto row = row_for_offset(selection.last().last.index);
-                auto const& styles = _theme->styles_for_scope(scope);
-                if (CGColorRef color = styles.line_highlight())
-                    render::fill_rect(context, color, full_width(rect_for(row)));
-            }
 		}
+
+        // WS 当前行背景
+        if(!selection.empty())
+        {
+            auto row = row_for_offset(selection.last().last.index);
+
+            auto const& styles = _theme->styles_for_scope(
+                _buffer.scope(selection.last().last.index).right
+            );
+
+            if(CGColorRef color = styles.line_highlight())
+                render::fill_rect(context, color, full_width(rect_for(row)));
+        }
 
 		base_colors_t const& baseColors = get_base_colors(_theme->is_dark());
 		if(_draw_wrap_column)
